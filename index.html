@@ -15,7 +15,7 @@
 </head>
 <body>
   <div id="root"></div>
-  <script type="text/babel">
+  <script type="text/babel" data-presets="react">
     const { useState, useEffect, useRef } = React;
 
     function MultiSphereSimulation() {
@@ -38,7 +38,7 @@
       const [hollowCylinderThickness, setHollowCylinderThickness] = useState(0.5);
 
       const timeStep = 0.02;
-      const gap = 2;
+      const gap = 1;
       const r = 1;
       const m = 1;
       const g = 9.8;
@@ -159,9 +159,9 @@
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x0f1419);
 
-        const camera = new THREE.PerspectiveCamera(70, width / height, 0.1, 1000);
-        camera.position.set(0, 12, 25);
-        camera.lookAt(0, -5, 0);
+        const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
+        camera.position.set(8, 8, 13);
+        camera.lookAt(8, -5, 0);
         cameraRef.current = camera;
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -205,32 +205,172 @@
         slopeLine.position.set(positionX, positionY, 0);
         scene.add(slopeLine);
 
+        // ── 滾動可視紋理 ──────────────────────────────────
+        const makeSphereRollTexture = (colorA, colorB, stripes = 8) => {
+          const size = 512;
+          const c = document.createElement('canvas');
+          c.width = size; c.height = size;
+          const ctx = c.getContext('2d');
+          const sw = size / stripes;
+          for (let i = 0; i < stripes; i++) {
+            ctx.fillStyle = i % 2 === 0 ? colorA : colorB;
+            ctx.fillRect(i * sw, 0, sw, size);
+          }
+          return new THREE.CanvasTexture(c);
+        };
+        const makeCylRollTexture = (colorA, colorB, stripes = 8) => {
+          const size = 512;
+          const c = document.createElement('canvas');
+          c.width = size; c.height = size;
+          const ctx = c.getContext('2d');
+          const sw = size / stripes;
+          for (let i = 0; i < stripes; i++) {
+            ctx.fillStyle = i % 2 === 0 ? colorA : colorB;
+            ctx.fillRect(i * sw, 0, sw, size);
+          }
+          return new THREE.CanvasTexture(c);
+        };
+        // 顏色插值：t=0 → 淡色，t=1 → 深色（與實心球相同）
+        const lerpHex = (hexA, hexB, t) => {
+          const a = parseInt(hexA.replace('#',''), 16);
+          const b = parseInt(hexB.replace('#',''), 16);
+          const rr = Math.round(((a>>16)&0xff) + (((b>>16)&0xff) - ((a>>16)&0xff)) * t);
+          const gg = Math.round(((a>>8)&0xff)  + (((b>>8)&0xff)  - ((a>>8)&0xff))  * t);
+          const bb = Math.round(((a)&0xff)      + (((b)&0xff)      - ((a)&0xff))      * t);
+          return `#${rr.toString(16).padStart(2,'0')}${gg.toString(16).padStart(2,'0')}${bb.toString(16).padStart(2,'0')}`;
+        };
+        // 空心球顏色依壁厚 x 插值：x 越大越接近實心球深色
+        const hT = (hollowSpherThickness - 0.01) / (1 - 0.01) * 0.85; // 0.99時約0.84，不到實心球深度
+        const hA = lerpHex('#ffccbb', '#ff5533', hT);
+        const hB = lerpHex('#cc8877', '#880011', hT);
+
+        const solidSphereTex  = makeSphereRollTexture('#ff5533', '#880011');
+        const hollowSphereTex = makeSphereRollTexture(hA, hB);
+        const solidCylTex     = makeCylRollTexture('#2244dd', '#001177');
+        const hollowCylTex    = makeCylRollTexture('#2244dd', '#001177');  // 同實心柱花紋顏色
+        // ────────────────────────────────────────────────
+
         const sphere = new THREE.Mesh(
           new THREE.SphereGeometry(r, 32, 32),
-          new THREE.MeshPhongMaterial({ color: 0xff4444, shininess: 100, emissive: 0xff2222 })
+          new THREE.MeshPhongMaterial({ map: solidSphereTex, shininess: 80 })
         );
         sphere.castShadow = true; scene.add(sphere); sphereRef.current = sphere;
 
-        const hollowSphere = new THREE.Mesh(
+        // 空心球：外球殼（FrontSide）+ 內球暗面（BackSide）模擬挖空，不透明
+        const hollowSphereInnerR = (1 - hollowSpherThickness) * r;
+        const hollowSphereGroup = new THREE.Group();
+        // 空心球：不透明，棋盤格紋外殼 + 內壁暗色
+        hollowSphereGroup.add(new THREE.Mesh(
           new THREE.SphereGeometry(r, 32, 32),
-          new THREE.MeshPhongMaterial({ color: 0xff6666, shininess: 80, emissive: 0x220000, transparent: true, opacity: 0.35, side: THREE.DoubleSide })
-        );
-        hollowSphere.castShadow = true; scene.add(hollowSphere); hollowSphereRef.current = hollowSphere;
+          new THREE.MeshPhongMaterial({ map: hollowSphereTex, shininess: 80, side: THREE.FrontSide })
+        ));
+        // 外球殼內表面
+        hollowSphereGroup.add(new THREE.Mesh(
+          new THREE.SphereGeometry(r, 32, 32),
+          new THREE.MeshPhongMaterial({ color: 0xcc3333, shininess: 40, side: THREE.BackSide })
+        ));
+        // 內空腔表面（半徑 (1-x)*r，BackSide 模擬內壁暗面）
+        hollowSphereGroup.add(new THREE.Mesh(
+          new THREE.SphereGeometry(hollowSphereInnerR, 32, 32),
+          new THREE.MeshPhongMaterial({ color: 0x0a0005, shininess: 0, side: THREE.BackSide })
+        ));
+        hollowSphereGroup.castShadow = true;
+        scene.add(hollowSphereGroup);
+        hollowSphereRef.current = hollowSphereGroup;
 
-        const cylinder = new THREE.Mesh(
-          new THREE.CylinderGeometry(r, r, 2 * r, 32),
-          new THREE.MeshPhongMaterial({ color: 0x4444ff, shininess: 100 })
-        );
-        cylinder.castShadow = true; scene.add(cylinder); cylinderRef.current = cylinder;
+        // 實心圓柱：側面條紋 + 純色端蓋（無條紋）
+        const solidCylGroup = new THREE.Group();
+        solidCylGroup.add(new THREE.Mesh(
+          new THREE.CylinderGeometry(r, r, 2 * r, 32, 1, true),
+          new THREE.MeshPhongMaterial({ map: solidCylTex, shininess: 80, side: THREE.FrontSide })
+        ));
+        const capMat = new THREE.MeshPhongMaterial({ color: 0x1133bb, shininess: 60 });
+        const topCap = new THREE.Mesh(new THREE.CircleGeometry(r, 32), capMat);
+        topCap.rotation.x = -Math.PI / 2; topCap.position.y = r;
+        solidCylGroup.add(topCap);
+        const bottomCap = new THREE.Mesh(new THREE.CircleGeometry(r, 32), capMat);
+        bottomCap.rotation.x = Math.PI / 2; bottomCap.position.y = -r;
+        solidCylGroup.add(bottomCap);
+        solidCylGroup.castShadow = true;
+        scene.add(solidCylGroup);
+        cylinderRef.current = solidCylGroup;
 
-        const hollowCylinder = new THREE.Mesh(
-          new THREE.CylinderGeometry(r, r, 2 * r, 32),
-          new THREE.MeshPhongMaterial({ color: 0x6688ff, shininess: 80, emissive: 0x001133, transparent: true, opacity: 0.35, side: THREE.DoubleSide })
+        // 空心圓柱：外層實心 + 內層深色柱體顯示挖空效果，不透明
+        const innerR = (1 - hollowCylinderThickness) * r;
+        const hollowCylGroup = new THREE.Group();
+        // 外圓柱（條紋 + 半透明）
+        const outerCylMesh = new THREE.Mesh(
+          new THREE.CylinderGeometry(r, r, 2 * r, 32, 1, true),
+          new THREE.MeshPhongMaterial({ map: hollowCylTex, shininess: 80, side: THREE.DoubleSide })
         );
-        hollowCylinder.castShadow = true; scene.add(hollowCylinder); hollowCylinderRef.current = hollowCylinder;
+        hollowCylGroup.add(outerCylMesh);
+        // 內圓柱（深色，顯示挖空空間）
+        const innerCylMesh = new THREE.Mesh(
+          new THREE.CylinderGeometry(innerR, innerR, 2 * r + 0.01, 32, 1, true),
+          new THREE.MeshPhongMaterial({ transparent: true, opacity: 0, side: THREE.BackSide })
+        );
+        hollowCylGroup.add(innerCylMesh);
+        // 上下端面（環形）— 用 RingGeometry
+        const topRing = new THREE.Mesh(
+          new THREE.RingGeometry(innerR, r, 32),
+          new THREE.MeshPhongMaterial({ color: 0x5577ee, shininess: 60, side: THREE.DoubleSide })
+        );
+        topRing.rotation.x = Math.PI / 2;
+        topRing.position.y = r;
+        hollowCylGroup.add(topRing);
+        const bottomRing = new THREE.Mesh(
+          new THREE.RingGeometry(innerR, r, 32),
+          new THREE.MeshPhongMaterial({ color: 0x5577ee, shininess: 60, side: THREE.DoubleSide })
+        );
+        bottomRing.rotation.x = Math.PI / 2;
+        bottomRing.position.y = -r;
+        hollowCylGroup.add(bottomRing);
+        hollowCylGroup.castShadow = true;
+        scene.add(hollowCylGroup);
+        hollowCylinderRef.current = hollowCylGroup;
 
         const trail = new THREE.Group(); scene.add(trail); trailRef.current = trail;
         const rankingLabels = new THREE.Group(); scene.add(rankingLabels); rankingLabelRef.current = rankingLabels;
+
+        // ── 座標軸指示器 ──────────────────────────────────
+        const axisOrigin = new THREE.Vector3(-7, 0, 0);
+        const axisLen = 2.5;
+
+        const makeAxisLabel = (text, color) => {
+          const c = document.createElement('canvas');
+          c.width = 256; c.height = 128;
+          const ctx = c.getContext('2d');
+          ctx.fillStyle = color;
+          ctx.font = 'bold 88px Arial';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(text, 128, 64);
+          const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true }));
+          sprite.scale.set(2.4, 1.2, 1);
+          return sprite;
+        };
+
+        // X 軸（紅）
+        const arrowX = new THREE.ArrowHelper(new THREE.Vector3(1,0,0), axisOrigin, axisLen, 0xff3333, 0.4, 0.25);
+        scene.add(arrowX);
+        const labelX = makeAxisLabel('+X', '#ff8888');
+        labelX.position.set(axisOrigin.x + axisLen + 1.4, axisOrigin.y, axisOrigin.z);
+        scene.add(labelX);
+
+        // Y 軸（綠）
+        const arrowY = new THREE.ArrowHelper(new THREE.Vector3(0,1,0), axisOrigin, axisLen, 0x33ff55, 0.4, 0.25);
+        scene.add(arrowY);
+        const labelY = makeAxisLabel('+Y', '#88ffaa');
+        labelY.position.set(axisOrigin.x, axisOrigin.y + axisLen + 0.8, axisOrigin.z);
+        scene.add(labelY);
+
+        // Z 軸（藍）
+        const arrowZ = new THREE.ArrowHelper(new THREE.Vector3(0,0,1), axisOrigin, axisLen, 0x3388ff, 0.4, 0.25);
+        scene.add(arrowZ);
+        const labelZ = makeAxisLabel('+Z', '#88ccff');
+        labelZ.position.set(axisOrigin.x, axisOrigin.y, axisOrigin.z + axisLen + 1.4);
+        scene.add(labelZ);
+        // ────────────────────────────────────────────────
 
         const handleResize = () => {
           if (!mountRef.current) return;
@@ -273,7 +413,7 @@
             const qZ = new THREE.Quaternion(); qZ.setFromAxisAngle(new THREE.Vector3(0, 0, 1), -k);
             mesh.quaternion.multiplyQuaternions(qZ, qX);
           } else {
-            mesh.rotation.z = k;
+            mesh.rotation.z = -k;
           }
         };
 
@@ -316,20 +456,13 @@
         while (trail.children.length > 0) trail.remove(trail.children[0]);
 
         const drawTrail = (I, zOffset, color) => {
-          const fullPts = [];
-          for (let t = 0; t <= maxTime; t += timeStep) fullPts.push(getPointPosition(t, I, zOffset));
-          if (fullPts.length > 1) {
-            trail.add(new THREE.Line(
-              new THREE.BufferGeometry().setFromPoints(fullPts),
-              new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.3 })
-            ));
-          }
+          if (time <= 0) return;
           const pastPts = [];
           for (let t = 0; t <= time; t += timeStep) pastPts.push(getPointPosition(t, I, zOffset));
           if (pastPts.length > 1) {
             trail.add(new THREE.Line(
               new THREE.BufferGeometry().setFromPoints(pastPts),
-              new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.95 })
+              new THREE.LineBasicMaterial({ color, linewidth: 3 })
             ));
           }
         };
@@ -350,8 +483,8 @@
         checkFastest(I_hollowCylinder, hollowCylinderRef.current);
 
         if (cameraRef.current && fastestObject) {
-          cameraRef.current.position.copy(fastestObject.position).add(new THREE.Vector3(0, 7, 20));
-          cameraRef.current.lookAt(fastestObject.position.x, fastestObject.position.y - 2, fastestObject.position.z);
+          cameraRef.current.position.copy(fastestObject.position).add(new THREE.Vector3(0, 8, 13));
+          cameraRef.current.lookAt(fastestObject.position.x, fastestObject.position.y - 5, fastestObject.position.z);
         }
       }, [time, slopeAngle, slopeHeight, hollowSpherThickness, hollowCylinderThickness,
           solidArrived, hollowArrived, cylinderArrived, hollowCylArrived]);
@@ -477,8 +610,11 @@
                 <h4 style={{ color:'#00ff88', marginTop:0, marginBottom:'12px' }}>基本公式（屏幕 x、y、z 坐標系）</h4>
                 <div style={{ color:'#ddd', marginBottom:'10px' }}>
                   <strong style={{ color:'#ffff88' }}>基本參數：</strong><br/>
-                  r={r} m | m={m} kg | g={g} m/s² | θ={slopeAngle}°<br/>
-                  I(實心球)=0.4·m·r²={I_solid.toFixed(4)} | I(實心圓柱)=0.5·m·r²={I_cylinder.toFixed(4)}
+                  r={r} m | m={m} kg | g={g} m/s² | θ={slopeAngle}°<br/><br/>
+                  I(實心球) = (2/5)·m·r² = {I_solid.toFixed(4)} kg·m²<br/>
+                  I(空心球) = (2/5)·m·r²·(1-(1-x)⁵)/(1-(1-x)³) = {I_hollowSphere.toFixed(4)} kg·m²　x={hollowSpherThickness.toFixed(2)}<br/>
+                  I(實心圓柱) = (1/2)·m·r² = {I_cylinder.toFixed(4)} kg·m²<br/>
+                  I(空心圓柱) = (1/2)·m·r²·(1-(1-x)⁴)/(1-(1-x)²) = {I_hollowCylinder.toFixed(4)} kg·m²　x={hollowCylinderThickness.toFixed(2)}
                 </div>
                 <div style={{ color:'#ddd', marginBottom:'10px' }}>
                   <strong style={{ color:'#ffff88' }}>公式1：y(t)</strong><br/>
@@ -505,8 +641,11 @@
       );
     }
 
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<MultiSphereSimulation />);
+    if (!window.__rollingSimMounted) {
+      window.__rollingSimMounted = true;
+      const root = ReactDOM.createRoot(document.getElementById('root'));
+      root.render(<MultiSphereSimulation />);
+    }
   </script>
 </body>
 </html>
