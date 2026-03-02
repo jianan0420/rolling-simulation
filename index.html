@@ -503,139 +503,141 @@
 
       const rankList = [maxTime_solid, maxTime_hollowSphere, maxTime_cylinder, maxTime_hollowCylinder].sort((a,b)=>a-b);
 
+      const [panelOpen, setPanelOpen] = React.useState(false);
+
       return (
-        <div style={{ width:'100%', height:'100vh', display:'flex', flexDirection:'column', backgroundColor:'#0f1419', color:'#fff', fontFamily:"'JetBrains Mono','Courier New',monospace" }}>
+        <div style={{ width:'100%', height:'100vh', display:'flex', flexDirection:'column', backgroundColor:'#0f1419', color:'#fff', fontFamily:"'JetBrains Mono','Courier New',monospace", userSelect:'none' }}>
           <style>{`
+            * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
             .slider-angle        { accent-color: #ff6464; }
             .slider-height       { accent-color: #64c864; }
             .slider-hollow-sphere{ accent-color: #ff8888; }
             .slider-hollow-cyl   { accent-color: #8888ff; }
             .slider-time         { accent-color: #00ff88; }
-            input[type=range] { height:6px; border-radius:3px; cursor:pointer; outline:none; border:none; background:rgba(255,255,255,0.08); }
-            input[type=range]::-webkit-slider-thumb { width:16px; height:16px; border-radius:50%; cursor:pointer; border:2px solid rgba(0,0,0,0.4); box-shadow:0 0 6px currentColor; }
-            input[type=range]::-webkit-slider-runnable-track { border-radius:3px; height:6px; }
-            input[type=number] { background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.15); border-radius:4px; color:#fff; font-family:'JetBrains Mono',monospace; font-size:12px; text-align:center; }
-            input[type=number]:focus { outline:none; border-color:rgba(0,255,136,0.5); }
+            input[type=range] {
+              -webkit-appearance: none; appearance: none;
+              height: 8px; border-radius: 4px; cursor: pointer;
+              outline: none; border: none;
+              background: rgba(255,255,255,0.12);
+              touch-action: none;
+            }
+            input[type=range]::-webkit-slider-thumb {
+              -webkit-appearance: none;
+              width: 26px; height: 26px; border-radius: 50%;
+              cursor: pointer; border: 3px solid rgba(0,0,0,0.4);
+              box-shadow: 0 0 8px currentColor;
+            }
+            input[type=range]::-webkit-slider-runnable-track { border-radius: 4px; height: 8px; }
+            input[type=number] {
+              background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.2);
+              border-radius: 6px; color: #fff; font-family: 'JetBrains Mono', monospace;
+              font-size: 13px; text-align: center; padding: 6px 4px;
+            }
+            input[type=number]:focus { outline: none; border-color: rgba(0,255,136,0.6); }
+            .ctrl-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+            .ctrl-label { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 5px; }
+            .ctrl-val { font-size: 20px; font-weight: bold; min-width: 70px; }
+            .stat-card { border-radius: 10px; padding: 14px; font-size: 12px; line-height: 1.7; }
+            .panel-scroll { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+            .toggle-btn {
+              display: flex; align-items: center; justify-content: center; gap: 8px;
+              padding: 10px 20px; border-radius: 20px; font-size: 12px;
+              background: rgba(0,255,136,0.12); border: 1px solid rgba(0,255,136,0.3);
+              color: #00ff88; cursor: pointer; transition: background 0.2s;
+              font-family: inherit; letter-spacing: 1px;
+            }
+            .toggle-btn:active { background: rgba(0,255,136,0.25); }
           `}</style>
 
-          <div ref={mountRef} style={{ flex:1, width:'100%', position:'relative' }} />
+          {/* 3D 視窗 */}
+          <div ref={mountRef} style={{ flex: 1, width: '100%', position: 'relative', minHeight: 0 }} />
 
-          <div style={{ padding:'20px', background:'linear-gradient(135deg,rgba(15,20,25,0.98),rgba(30,40,60,0.98))', borderTop:'1px solid rgba(0,255,170,0.2)', boxShadow:'0 -20px 60px rgba(0,0,0,0.7)', maxHeight:'60vh', overflowY:'auto' }}>
-            <div style={{ maxWidth:'1600px', margin:'0 auto' }}>
+          {/* 底部面板 */}
+          <div style={{
+            background: 'linear-gradient(180deg, rgba(10,14,20,0.97) 0%, rgba(18,28,45,0.99) 100%)',
+            borderTop: '1px solid rgba(0,255,170,0.2)',
+            boxShadow: '0 -8px 40px rgba(0,0,0,0.6)',
+          }}>
 
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:'20px', marginBottom:'20px', paddingBottom:'20px', borderBottom:'1px solid rgba(0,255,136,0.15)' }}>
-
-                <div>
-                  <label style={{ fontSize:'11px', color:'#888', textTransform:'uppercase', letterSpacing:'2px', display:'block', marginBottom:'8px' }}>θ 斜面角度</label>
-                  <div style={{ display:'flex', gap:'10px', alignItems:'center' }}>
-                    <input type="range" min="1" max="89" step="1" value={slopeAngle} className="slider-angle" onChange={e => setSlopeAngle(parseFloat(e.target.value))} style={{ flex:1 }} />
-                    <input type="number" min="1" max="89" value={slopeAngle} onChange={e => setSlopeAngle(parseFloat(e.target.value)||0)} style={{ width:'50px', padding:'4px' }} />
-                  </div>
-                  <div style={{ fontSize:'18px', fontWeight:'bold', color:'#ff6464', marginTop:'4px' }}>{slopeAngle.toFixed(1)}°</div>
-                </div>
-
-                <div>
-                  <label style={{ fontSize:'11px', color:'#888', textTransform:'uppercase', letterSpacing:'2px', display:'block', marginBottom:'8px' }}>斜面高度 (H)</label>
-                  <div style={{ display:'flex', gap:'10px', alignItems:'center' }}>
-                    <input type="range" min="1" max="30" step="0.5" value={slopeHeight} className="slider-height" onChange={e => setSlopeHeight(parseFloat(e.target.value))} style={{ flex:1 }} />
-                    <input type="number" min="1" max="30" step="0.5" value={slopeHeight} onChange={e => setSlopeHeight(parseFloat(e.target.value)||0)} style={{ width:'50px', padding:'4px' }} />
-                  </div>
-                  <div style={{ fontSize:'18px', fontWeight:'bold', color:'#64c864', marginTop:'4px' }}>{slopeHeight.toFixed(1)} m</div>
-                </div>
-
-                <div>
-                  <label style={{ fontSize:'11px', color:'#888', textTransform:'uppercase', letterSpacing:'2px', display:'block', marginBottom:'8px' }}>空心球壁厚比例 (x)</label>
-                  <div style={{ display:'flex', gap:'10px', alignItems:'center' }}>
-                    <input type="range" min="0.01" max="0.99" step="0.01" value={hollowSpherThickness} className="slider-hollow-sphere" onChange={e => setHollowSphereThickness(parseFloat(e.target.value))} style={{ flex:1 }} />
-                    <input type="number" min="0.01" max="0.99" step="0.01" value={hollowSpherThickness} onChange={e => setHollowSphereThickness(parseFloat(e.target.value)||0.01)} style={{ width:'50px', padding:'4px' }} />
-                  </div>
-                  <div style={{ fontSize:'14px', fontWeight:'bold', color:'#ff8888', marginTop:'4px' }}>{hollowSpherThickness.toFixed(2)}</div>
-                </div>
-
-                <div>
-                  <label style={{ fontSize:'11px', color:'#888', textTransform:'uppercase', letterSpacing:'2px', display:'block', marginBottom:'8px' }}>空心圓柱壁厚比例 (x)</label>
-                  <div style={{ display:'flex', gap:'10px', alignItems:'center' }}>
-                    <input type="range" min="0.01" max="0.99" step="0.01" value={hollowCylinderThickness} className="slider-hollow-cyl" onChange={e => setHollowCylinderThickness(parseFloat(e.target.value))} style={{ flex:1 }} />
-                    <input type="number" min="0.01" max="0.99" step="0.01" value={hollowCylinderThickness} onChange={e => setHollowCylinderThickness(parseFloat(e.target.value)||0.01)} style={{ width:'50px', padding:'4px' }} />
-                  </div>
-                  <div style={{ fontSize:'14px', fontWeight:'bold', color:'#8888ff', marginTop:'4px' }}>{hollowCylinderThickness.toFixed(2)}</div>
-                </div>
-
-                <div>
-                  <label style={{ fontSize:'11px', color:'#888', textTransform:'uppercase', letterSpacing:'2px', display:'block', marginBottom:'8px' }}>運動時間 (t)</label>
-                  <div style={{ display:'flex', gap:'10px', alignItems:'center' }}>
-                    <input type="range" min="0" max={sliderMax} step={timeStep} value={time} className="slider-time" onChange={e => setTime(parseFloat(e.target.value))} style={{ flex:1 }} />
-                  </div>
-                  <div style={{ fontSize:'18px', fontWeight:'bold', color:'#00ff88', marginTop:'4px' }}>{time.toFixed(2)}s / {sliderMax.toFixed(2)}s</div>
-                </div>
-
+            {/* ── 時間軸（永遠顯示）─────────────────── */}
+            <div style={{ padding: '14px 18px 10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <span style={{ fontSize: '10px', color: '#888', letterSpacing: '1.5px', textTransform: 'uppercase' }}>運動時間 t</span>
+                <span style={{ fontSize: '18px', fontWeight: 'bold', color: '#00ff88' }}>
+                  {time.toFixed(2)}s <span style={{ fontSize: '12px', color: '#555' }}>/ {sliderMax.toFixed(2)}s</span>
+                </span>
               </div>
-
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:'15px' }}>
-                <div style={{ background:'rgba(255,68,68,0.1)', border:'1px solid rgba(255,68,68,0.3)', borderRadius:'6px', padding:'12px', fontSize:'11px' }}>
-                  <div style={{ color:'#ff6464', fontWeight:'bold', marginBottom:'6px' }}>實心球 (Solid Sphere)</div>
-                  <div>I = 0.4 m·r² = {I_solid.toFixed(4)}</div>
-                  <div>y({time.toFixed(2)}) = {y_solid.toFixed(4)} m</div>
-                  <div>k({time.toFixed(2)}) = {(k_solid*180/Math.PI).toFixed(2)}°</div>
-                  {solidArrived && <div style={{ color:'#ffff00', marginTop:'4px' }}>✓ 到達 @ {maxTime_solid.toFixed(3)}s（第{rankList.indexOf(maxTime_solid)+1}名）</div>}
-                </div>
-                <div style={{ background:'rgba(255,68,68,0.15)', border:'1px solid rgba(255,68,68,0.4)', borderRadius:'6px', padding:'12px', fontSize:'11px' }}>
-                  <div style={{ color:'#ff8888', fontWeight:'bold', marginBottom:'6px' }}>空心球 (Hollow Sphere) x={hollowSpherThickness.toFixed(2)}</div>
-                  <div>I = {I_hollowSphere.toFixed(4)}</div>
-                  <div>y({time.toFixed(2)}) = {y_hollow.toFixed(4)} m</div>
-                  <div>k({time.toFixed(2)}) = {(k_hollow*180/Math.PI).toFixed(2)}°</div>
-                  {hollowArrived && <div style={{ color:'#ffff00', marginTop:'4px' }}>✓ 到達 @ {maxTime_hollowSphere.toFixed(3)}s（第{rankList.indexOf(maxTime_hollowSphere)+1}名）</div>}
-                </div>
-                <div style={{ background:'rgba(68,68,255,0.1)', border:'1px solid rgba(68,68,255,0.3)', borderRadius:'6px', padding:'12px', fontSize:'11px' }}>
-                  <div style={{ color:'#6464ff', fontWeight:'bold', marginBottom:'6px' }}>實心圓柱 (Solid Cylinder)</div>
-                  <div>I = 0.5 m·r² = {I_cylinder.toFixed(4)}</div>
-                  <div>y({time.toFixed(2)}) = {y_cylinder.toFixed(4)} m</div>
-                  <div>k({time.toFixed(2)}) = {(k_cylinder*180/Math.PI).toFixed(2)}°</div>
-                  {cylinderArrived && <div style={{ color:'#ffff00', marginTop:'4px' }}>✓ 到達 @ {maxTime_cylinder.toFixed(3)}s（第{rankList.indexOf(maxTime_cylinder)+1}名）</div>}
-                </div>
-                <div style={{ background:'rgba(68,68,255,0.15)', border:'1px solid rgba(68,68,255,0.4)', borderRadius:'6px', padding:'12px', fontSize:'11px' }}>
-                  <div style={{ color:'#8888ff', fontWeight:'bold', marginBottom:'6px' }}>空心圓柱 (Hollow Cylinder) x={hollowCylinderThickness.toFixed(2)}</div>
-                  <div>I = {I_hollowCylinder.toFixed(4)}</div>
-                  <div>y({time.toFixed(2)}) = {y_hollow_cyl.toFixed(4)} m</div>
-                  <div>k({time.toFixed(2)}) = {(k_hollow_cyl*180/Math.PI).toFixed(2)}°</div>
-                  {hollowCylArrived && <div style={{ color:'#ffff00', marginTop:'4px' }}>✓ 到達 @ {maxTime_hollowCylinder.toFixed(3)}s（第{rankList.indexOf(maxTime_hollowCylinder)+1}名）</div>}
-                </div>
-              </div>
-
-              <div style={{ marginTop:'15px', paddingTop:'10px', borderTop:'1px solid rgba(0,255,136,0.1)', fontSize:'10px', color:'#666', textAlign:'center' }}>
-                🔴 紅=實心球 | 🔴 淺紅=空心球 | 🔵 藍=實心圓柱 | 🔵 淺藍=空心圓柱 | 最慢 {maxTime.toFixed(2)}s
-              </div>
-
-              <div style={{ marginTop:'20px', paddingTop:'20px', borderTop:'1px solid rgba(0,255,136,0.15)', background:'rgba(0,255,136,0.05)', borderRadius:'6px', padding:'16px', fontSize:'11px', fontFamily:"'Courier New',monospace", lineHeight:'1.8' }}>
-                <h4 style={{ color:'#00ff88', marginTop:0, marginBottom:'12px' }}>基本公式（屏幕 x、y、z 坐標系）</h4>
-                <div style={{ color:'#ddd', marginBottom:'10px' }}>
-                  <strong style={{ color:'#ffff88' }}>基本參數：</strong><br/>
-                  r={r} m | m={m} kg | g={g} m/s² | θ={slopeAngle}°<br/><br/>
-                  I(實心球) = (2/5)·m·r² = {I_solid.toFixed(4)} kg·m²<br/>
-                  I(空心球) = (2/5)·m·r²·(1-(1-x)⁵)/(1-(1-x)³) = {I_hollowSphere.toFixed(4)} kg·m²　x={hollowSpherThickness.toFixed(2)}<br/>
-                  I(實心圓柱) = (1/2)·m·r² = {I_cylinder.toFixed(4)} kg·m²<br/>
-                  I(空心圓柱) = (1/2)·m·r²·(1-(1-x)⁴)/(1-(1-x)²) = {I_hollowCylinder.toFixed(4)} kg·m²　x={hollowCylinderThickness.toFixed(2)}
-                </div>
-                <div style={{ color:'#ddd', marginBottom:'10px' }}>
-                  <strong style={{ color:'#ffff88' }}>公式1：y(t)</strong><br/>
-                  y(t) = [m·r²·g/(m·r²+I)] × sin²θ·t²/2
-                </div>
-                <div style={{ color:'#ddd', marginBottom:'10px' }}>
-                  <strong style={{ color:'#ffff88' }}>公式2：k(t)</strong><br/>
-                  k = (y/sinθ) × 180/(r·π) × π/180
-                </div>
-                <div style={{ color:'#ddd', marginBottom:'10px' }}>
-                  <strong style={{ color:'#ffff88' }}>公式3：球心位置</strong><br/>
-                  x_c = y/tanθ，y_c = r - y，z_c = zOffset
-                </div>
-                <div style={{ color:'#ddd' }}>
-                  <strong style={{ color:'#ffff88' }}>公式4：質點位置</strong><br/>
-                  x_p = y/tanθ - 2r·sin(k/2)·cos(k/2)<br/>
-                  y_p = 2r·sin²(k/2) - y
-                </div>
-              </div>
-
+              <input type="range" min="0" max={sliderMax} step={timeStep} value={time}
+                className="slider-time" onChange={e => setTime(parseFloat(e.target.value))}
+                style={{ width: '100%' }} />
             </div>
+
+            {/* ── 展開/收合按鈕 ─────────────────── */}
+            <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: '10px' }}>
+              <button className="toggle-btn" onClick={() => setPanelOpen(o => !o)}>
+                {panelOpen ? '▼ 收起' : '▲ 參數與數據'}
+              </button>
+            </div>
+
+            {/* ── 展開內容 ─────────────────── */}
+            {panelOpen && (
+              <div className="panel-scroll" style={{ maxHeight: '55vh', padding: '0 18px 18px' }}>
+
+                {/* 參數控制 */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px', marginBottom: '18px', paddingBottom: '18px', borderBottom: '1px solid rgba(0,255,136,0.12)' }}>
+
+                  {[
+                    { label: 'θ 斜面角度', cls: 'slider-angle', min: 1, max: 89, step: 1, val: slopeAngle, set: setSlopeAngle, unit: '°', color: '#ff6464', toFixed: 1 },
+                    { label: '斜面高度 H', cls: 'slider-height', min: 1, max: 30, step: 0.5, val: slopeHeight, set: setSlopeHeight, unit: ' m', color: '#64c864', toFixed: 1 },
+                    { label: '空心球壁厚 x', cls: 'slider-hollow-sphere', min: 0.01, max: 0.99, step: 0.01, val: hollowSpherThickness, set: setHollowSphereThickness, unit: '', color: '#ff8888', toFixed: 2 },
+                    { label: '空心柱壁厚 x', cls: 'slider-hollow-cyl', min: 0.01, max: 0.99, step: 0.01, val: hollowCylinderThickness, set: setHollowCylinderThickness, unit: '', color: '#8888ff', toFixed: 2 },
+                  ].map(({ label, cls, min, max, step, val, set, unit, color, toFixed }) => (
+                    <div key={label}>
+                      <div className="ctrl-label">{label}</div>
+                      <div className="ctrl-row">
+                        <input type="range" min={min} max={max} step={step} value={val}
+                          className={cls} onChange={e => set(parseFloat(e.target.value))} style={{ flex: 1 }} />
+                        <input type="number" min={min} max={max} step={step} value={val}
+                          onChange={e => set(parseFloat(e.target.value) || min)} style={{ width: '52px' }} />
+                      </div>
+                      <div className="ctrl-val" style={{ color }}>{val.toFixed(toFixed)}{unit}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* 四個物體數據 */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginBottom: '16px' }}>
+                  {[
+                    { label: '實心球', sub: '', color: '#ff6464', bg: 'rgba(255,68,68,0.1)', border: 'rgba(255,68,68,0.3)', I: I_solid, y: y_solid, k: k_solid, arrived: solidArrived, maxT: maxTime_solid },
+                    { label: '空心球', sub: ` x=${hollowSpherThickness.toFixed(2)}`, color: '#ff8888', bg: 'rgba(255,68,68,0.08)', border: 'rgba(255,100,100,0.3)', I: I_hollowSphere, y: y_hollow, k: k_hollow, arrived: hollowArrived, maxT: maxTime_hollowSphere },
+                    { label: '實心圓柱', sub: '', color: '#6464ff', bg: 'rgba(68,68,255,0.1)', border: 'rgba(68,68,255,0.3)', I: I_cylinder, y: y_cylinder, k: k_cylinder, arrived: cylinderArrived, maxT: maxTime_cylinder },
+                    { label: '空心圓柱', sub: ` x=${hollowCylinderThickness.toFixed(2)}`, color: '#8888ff', bg: 'rgba(68,68,255,0.08)', border: 'rgba(100,100,255,0.3)', I: I_hollowCylinder, y: y_hollow_cyl, k: k_hollow_cyl, arrived: hollowCylArrived, maxT: maxTime_hollowCylinder },
+                  ].map(({ label, sub, color, bg, border, I, y, k, arrived, maxT }) => (
+                    <div key={label} className="stat-card" style={{ background: bg, border: `1px solid ${border}` }}>
+                      <div style={{ color, fontWeight: 'bold', marginBottom: '4px', fontSize: '11px' }}>{label}{sub}</div>
+                      <div style={{ color: '#ccc' }}>I = {I.toFixed(3)}</div>
+                      <div style={{ color: '#ccc' }}>y = {y.toFixed(3)} m</div>
+                      <div style={{ color: '#ccc' }}>k = {(k*180/Math.PI).toFixed(1)}°</div>
+                      {arrived && <div style={{ color: '#ffff44', marginTop: '4px', fontSize: '11px' }}>✓ {maxT.toFixed(2)}s — 第{rankList.indexOf(maxT)+1}名</div>}
+                    </div>
+                  ))}
+                </div>
+
+                {/* 公式區 */}
+                <div style={{ background: 'rgba(0,255,136,0.04)', border: '1px solid rgba(0,255,136,0.12)', borderRadius: '10px', padding: '14px', fontSize: '11px', fontFamily: "'Courier New', monospace", lineHeight: '1.9', color: '#ccc' }}>
+                  <div style={{ color: '#00ff88', fontWeight: 'bold', marginBottom: '10px', fontSize: '12px' }}>基本公式</div>
+                  <div style={{ color:'#ffff88', marginBottom: '2px' }}>r={r} m | m={m} kg | g={g} m/s² | θ={slopeAngle}°</div>
+                  <div>I(實心球) = 2/5·mr² = {I_solid.toFixed(4)}</div>
+                  <div>I(空心球) = 2/5·mr²·(1-(1-x)⁵)/(1-(1-x)³) = {I_hollowSphere.toFixed(4)}</div>
+                  <div>I(實心柱) = 1/2·mr² = {I_cylinder.toFixed(4)}</div>
+                  <div style={{ marginBottom: '10px' }}>I(空心柱) = 1/2·mr²·(1-(1-x)⁴)/(1-(1-x)²) = {I_hollowCylinder.toFixed(4)}</div>
+                  <div style={{ color:'#ffff88' }}>y(t) = [mr²g/(mr²+I)]·sin²θ·t²/2</div>
+                  <div style={{ color:'#ffff88' }}>k = y/(r·sinθ)</div>
+                  <div style={{ color:'#ffff88' }}>x_c = y/tanθ, y_c = r−y</div>
+                </div>
+
+              </div>
+            )}
           </div>
         </div>
       );
