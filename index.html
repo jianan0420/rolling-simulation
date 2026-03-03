@@ -370,9 +370,9 @@ function MultiSphereSimulation() {
         flexShrink:0,
       }}>
         {/* ── 固定區：時間拉條 + 播放控制，永遠可見 ── */}
-        <div style={{padding:'14px 16px 8px'}}>
+        <div style={{padding:'8px 16px 4px'}}>
           {/* 時間拉條 */}
-          <div style={{marginBottom:'10px'}}>
+          <div style={{marginBottom:'6px'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px'}}>
               <span className="cl" style={{margin:0}}>運動時間 t</span>
               <span style={{fontSize:'18px',fontWeight:'bold',color:'#00ff88'}}>
@@ -395,7 +395,7 @@ function MultiSphereSimulation() {
                 <span style={kbdStyle}>←</span> 負向加速
               </div>
               <button className="pb"
-                style={{width:'100%',height:'44px',fontSize:'22px',borderColor:'rgba(255,200,80,0.35)',color:speedIdx<=0?'rgba(255,200,80,0.25)':'#ffcc44',background:'rgba(255,200,80,0.07)',opacity:speedIdx<=0?0.4:1}}
+                style={{width:'100%',height:'36px',fontSize:'22px',borderColor:'rgba(255,200,80,0.35)',color:speedIdx<=0?'rgba(255,200,80,0.25)':'#ffcc44',background:'rgba(255,200,80,0.07)',opacity:speedIdx<=0?0.4:1}}
                 onClick={()=>{ if(speedIdx>0) handleSetSpeed(SPEEDS[speedIdx-1]); }}>
                 &#x23EA;
               </button>
@@ -407,7 +407,7 @@ function MultiSphereSimulation() {
                 <span style={kbdStyle}>Space</span> 播放/暫停
               </div>
               <button className="pb"
-                style={{width:'100%',height:'44px',fontSize:'15px',borderColor:'rgba(0,255,136,0.4)',color:'#00ff88',background:playing?'rgba(0,255,136,0.18)':'rgba(0,255,136,0.07)'}}
+                style={{width:'100%',height:'36px',fontSize:'15px',borderColor:'rgba(0,255,136,0.4)',color:'#00ff88',background:playing?'rgba(0,255,136,0.18)':'rgba(0,255,136,0.07)'}}
                 onClick={()=>setPlaying(p=>!p)}>
                 {playing ? '⏸ 暫停' : '▶ 播放'}
               </button>
@@ -422,7 +422,7 @@ function MultiSphereSimulation() {
                 <span style={kbdStyle}>→</span> 正向加速
               </div>
               <button className="pb"
-                style={{width:'100%',height:'44px',fontSize:'22px',borderColor:'rgba(255,200,80,0.35)',color:speedIdx>=SPEEDS.length-1?'rgba(255,200,80,0.25)':'#ffcc44',background:'rgba(255,200,80,0.07)',opacity:speedIdx>=SPEEDS.length-1?0.4:1}}
+                style={{width:'100%',height:'36px',fontSize:'22px',borderColor:'rgba(255,200,80,0.35)',color:speedIdx>=SPEEDS.length-1?'rgba(255,200,80,0.25)':'#ffcc44',background:'rgba(255,200,80,0.07)',opacity:speedIdx>=SPEEDS.length-1?0.4:1}}
                 onClick={()=>{ if(speedIdx<SPEEDS.length-1) handleSetSpeed(SPEEDS[speedIdx+1]); }}>
                 &#x23E9;
               </button>
@@ -430,7 +430,7 @@ function MultiSphereSimulation() {
           </div>
   
           {/* 速度刻度列 */}
-          <div style={{display:'flex',justifyContent:'center',gap:'4px',marginBottom:'16px',flexWrap:'wrap'}}>
+          <div style={{display:'flex',justifyContent:'center',gap:'4px',marginBottom:'8px',flexWrap:'wrap'}}>
             {SPEEDS.map((s,i)=>(
               <div key={s} onClick={()=>handleSetSpeed(s)}
                 style={{
@@ -447,7 +447,7 @@ function MultiSphereSimulation() {
         </div>
         {/* ── 可滾動區：參數、數據、公式 ── */}
         <div style={{
-          maxHeight:'calc(50vh - 130px)',
+          maxHeight:'calc(50vh - 100px)',
           overflowY:'auto',
           overflowX:'hidden',
           WebkitOverflowScrolling:'touch',
