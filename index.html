@@ -36,13 +36,14 @@ function MultiSphereSimulation() {
   const [hollowSpherThickness, setHollowSphereThickness]      = useState(0.5);
   const [hollowCylinderThickness, setHollowCylinderThickness] = useState(0.5);
 
-  // speed 負數=倒放，正數=正放
   const [playing, setPlaying] = useState(false);
   const [speed,   setSpeed]   = useState(1);
   const rafRef       = useRef(null);
   const lastTsRef    = useRef(null);
   const sliderMaxRef = useRef(1);
   const speedRef     = useRef(1);
+  const playingRef   = useRef(false);
+  const speedIdxRef  = useRef(7); // index of 1 in SPEEDS
   const SPEEDS = [-4, -2, -1, -0.5, -0.25, 0.25, 0.5, 1, 2, 4];
 
   const timeStep = 0.02;
@@ -71,6 +72,7 @@ function MultiSphereSimulation() {
   const sliderMax = Math.ceil(maxTime/timeStep)*timeStep;
   useEffect(()=>{ sliderMaxRef.current=sliderMax; },[sliderMax]);
   useEffect(()=>{ speedRef.current=speed; },[speed]);
+  useEffect(()=>{ playingRef.current=playing; },[playing]);
 
   const hasReachedHeight  = (t,I) => calculateY(t,I)>slopeHeight;
   const getObjectPosition = (t,I,z) => { const y=Math.min(calculateY(t,I),slopeHeight); return new THREE.Vector3(y/Math.tan(theta),r-y,z); };
@@ -98,7 +100,20 @@ function MultiSphereSimulation() {
 
   useEffect(()=>{ timeRef.current=time; },[time]);
 
-  // RAF 播放 loop
+  // ── handleSetSpeed：切速度 + 邊界自動播放 ──
+  const handleSetSpeed = (s) => {
+    const idx = SPEEDS.indexOf(s);
+    speedIdxRef.current = idx;
+    setSpeed(s);
+    speedRef.current = s;
+    const atEnd   = timeRef.current >= sliderMaxRef.current - 0.001;
+    const atStart = timeRef.current <= 0.001;
+    if((atEnd && s<0)||(atStart && s>0)){
+      setPlaying(true);
+    }
+  };
+
+  // ── RAF 播放 loop ──
   useEffect(()=>{
     if(rafRef.current) cancelAnimationFrame(rafRef.current);
     lastTsRef.current=null;
@@ -109,7 +124,6 @@ function MultiSphereSimulation() {
       const spd=speedRef.current;
       const next=Math.max(0,Math.min(sliderMaxRef.current,timeRef.current+dt*spd));
       timeRef.current=next; setTime(next);
-      // 到邊界：只有在沒有「繼續往同方向」的需要時才停
       if((next<=0&&spd<0)||(next>=sliderMaxRef.current&&spd>0)){setPlaying(false);return;}
       rafRef.current=requestAnimationFrame(loop);
     };
@@ -117,19 +131,32 @@ function MultiSphereSimulation() {
     return ()=>{if(rafRef.current) cancelAnimationFrame(rafRef.current);};
   },[playing]);
 
-  // 速度改變：若正在播放就更新 speedRef（loop 會自動讀新值）
-  // 若已停在邊界且新速度能往回走，自動重啟播放
-  const handleSetSpeed = (s) => {
-    setSpeed(s);
-    speedRef.current=s;
-    // 在最末端切換成負速 → 自動開始倒放
-    const atEnd   = timeRef.current >= sliderMaxRef.current - 0.001;
-    const atStart = timeRef.current <= 0.001;
-    if((atEnd && s<0)||(atStart && s>0)){
-      setPlaying(true);
-    }
-  };
+  // ── 鍵盤控制 ──
+  useEffect(()=>{
+    const onKey=(e)=>{
+      // 避免在 input 欄位觸發
+      if(e.target.tagName==='INPUT') return;
+      if(e.key===' '||e.code==='Space'){
+        e.preventDefault();
+        setPlaying(p=>{
+          playingRef.current=!p;
+          return !p;
+        });
+      } else if(e.key==='ArrowRight'){
+        e.preventDefault();
+        const cur=speedIdxRef.current;
+        if(cur<SPEEDS.length-1) handleSetSpeed(SPEEDS[cur+1]);
+      } else if(e.key==='ArrowLeft'){
+        e.preventDefault();
+        const cur=speedIdxRef.current;
+        if(cur>0) handleSetSpeed(SPEEDS[cur-1]);
+      }
+    };
+    window.addEventListener('keydown',onKey);
+    return ()=>window.removeEventListener('keydown',onKey);
+  },[]);
 
+  // ── Three.js 場景 ──
   useEffect(()=>{
     if(!mountRef.current) return;
     const W=mountRef.current.clientWidth,H=mountRef.current.clientHeight;
@@ -305,8 +332,14 @@ function MultiSphereSimulation() {
   const rankList=[maxTime_solid,maxTime_hollowSphere,maxTime_cylinder,maxTime_hollowCylinder].sort((a,b)=>a-b);
 
   const speedIdx = SPEEDS.indexOf(speed);
-  const speedLabel = speed<0 ? `◀ ${Math.abs(speed)}x` : `${speed}x ▶`;
-  const isNeg = speed < 0;
+  const isNeg    = speed < 0;
+  const speedLabel = isNeg ? `◀ ${Math.abs(speed)}x` : `${speed}x ▶`;
+
+  const kbdStyle = {
+    display:'inline-block', fontSize:'10px', color:'#aaa',
+    background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.25)',
+    borderRadius:'4px', padding:'1px 5px', letterSpacing:'0.5px', fontFamily:'monospace'
+  };
 
   return (
     <div style={{width:'100%',height:'100vh',display:'flex',flexDirection:'column',backgroundColor:'#0f1419',color:'#fff',fontFamily:"'JetBrains Mono','Courier New',monospace",userSelect:'none',touchAction:'pan-y'}}>
@@ -344,20 +377,28 @@ function MultiSphereSimulation() {
             style={{width:'100%'}} />
         </div>
 
-        {/* 播放控制列：減速 | 播放/暫停 | 加速 */}
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1.4fr 1fr',gap:'8px',marginBottom:'16px',alignItems:'center'}}>
+        {/* 播放控制列 */}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1.4fr 1fr',gap:'8px',marginBottom:'4px',alignItems:'start'}}>
 
-          {/* 減速 << */}
-          <button className="pb"
-            style={{height:'44px',fontSize:'22px',borderColor:'rgba(255,200,80,0.35)',color: speedIdx<=0?'rgba(255,200,80,0.25)':'#ffcc44',background:'rgba(255,200,80,0.07)',opacity:speedIdx<=0?0.4:1}}
-            onClick={()=>{ if(speedIdx>0) handleSetSpeed(SPEEDS[speedIdx-1]); }}>
-            &#x23EA;
-          </button>
-
-          {/* 播放/暫停（中間）*/}
+          {/* 減速 */}
           <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'4px'}}>
+            <div style={{fontSize:'10px',color:'#888',textAlign:'center'}}>
+              <span style={kbdStyle}>←</span> 減速
+            </div>
             <button className="pb"
-              style={{width:'100%',height:'44px',fontSize:'16px',borderColor:'rgba(0,255,136,0.4)',color:'#00ff88',background:playing?'rgba(0,255,136,0.18)':'rgba(0,255,136,0.07)'}}
+              style={{width:'100%',height:'44px',fontSize:'22px',borderColor:'rgba(255,200,80,0.35)',color:speedIdx<=0?'rgba(255,200,80,0.25)':'#ffcc44',background:'rgba(255,200,80,0.07)',opacity:speedIdx<=0?0.4:1}}
+              onClick={()=>{ if(speedIdx>0) handleSetSpeed(SPEEDS[speedIdx-1]); }}>
+              &#x23EA;
+            </button>
+          </div>
+
+          {/* 播放/暫停 */}
+          <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'4px'}}>
+            <div style={{fontSize:'10px',color:'#888',textAlign:'center'}}>
+              <span style={kbdStyle}>Space</span> 播放/暫停
+            </div>
+            <button className="pb"
+              style={{width:'100%',height:'44px',fontSize:'15px',borderColor:'rgba(0,255,136,0.4)',color:'#00ff88',background:playing?'rgba(0,255,136,0.18)':'rgba(0,255,136,0.07)'}}
               onClick={()=>setPlaying(p=>!p)}>
               {playing ? '⏸ 暫停' : '▶ 播放'}
             </button>
@@ -366,12 +407,33 @@ function MultiSphereSimulation() {
             </div>
           </div>
 
-          {/* 加速 >> */}
-          <button className="pb"
-            style={{height:'44px',fontSize:'22px',borderColor:'rgba(255,200,80,0.35)',color:speedIdx>=SPEEDS.length-1?'rgba(255,200,80,0.25)':'#ffcc44',background:'rgba(255,200,80,0.07)',opacity:speedIdx>=SPEEDS.length-1?0.4:1}}
-            onClick={()=>{ if(speedIdx<SPEEDS.length-1) handleSetSpeed(SPEEDS[speedIdx+1]); }}>
-            &#x23E9;
-          </button>
+          {/* 加速 */}
+          <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'4px'}}>
+            <div style={{fontSize:'10px',color:'#888',textAlign:'center'}}>
+              <span style={kbdStyle}>→</span> 加速
+            </div>
+            <button className="pb"
+              style={{width:'100%',height:'44px',fontSize:'22px',borderColor:'rgba(255,200,80,0.35)',color:speedIdx>=SPEEDS.length-1?'rgba(255,200,80,0.25)':'#ffcc44',background:'rgba(255,200,80,0.07)',opacity:speedIdx>=SPEEDS.length-1?0.4:1}}
+              onClick={()=>{ if(speedIdx<SPEEDS.length-1) handleSetSpeed(SPEEDS[speedIdx+1]); }}>
+              &#x23E9;
+            </button>
+          </div>
+        </div>
+
+        {/* 速度刻度列 */}
+        <div style={{display:'flex',justifyContent:'center',gap:'4px',marginBottom:'16px',flexWrap:'wrap'}}>
+          {SPEEDS.map((s,i)=>(
+            <div key={s} onClick={()=>handleSetSpeed(s)}
+              style={{
+                padding:'2px 7px', borderRadius:'4px', fontSize:'11px', cursor:'pointer',
+                fontWeight: s===speed?'bold':'normal',
+                color: s===speed?(s<0?'#ffaa44':'#88aaff'):'#555',
+                background: s===speed?(s<0?'rgba(255,160,80,0.18)':'rgba(100,150,255,0.15)'):'transparent',
+                border: `1px solid ${s===speed?(s<0?'rgba(255,160,80,0.4)':'rgba(100,150,255,0.4)'):'rgba(255,255,255,0.1)'}`,
+              }}>
+              {s<0?`◀${Math.abs(s)}`:`${s}▶`}
+            </div>
+          ))}
         </div>
 
         {/* 參數控制 */}
@@ -418,7 +480,7 @@ function MultiSphereSimulation() {
           <div style={{color:'#00ff88',fontWeight:'bold',marginBottom:'10px',fontSize:'12px',letterSpacing:'1px'}}>基本公式</div>
           <div style={{color:'#ffff88',marginBottom:'8px'}}>r={r} m | m={m} kg | g={g} m/s² | θ={slopeAngle}°</div>
           <div style={{marginBottom:'10px'}}>
-            <span className="fk">慣性矩：</span><br/>
+            <span className="fk">轉動慣量：</span><br/>
             I(實心球) = 2/5·mr² = <span className="fv">{I_solid.toFixed(4)}</span><br/>
             I(空心球) = 2/5·mr²·(1−(1−x)⁵)/(1−(1−x)³) = <span className="fv">{I_hollowSphere.toFixed(4)}</span><br/>
             I(實心柱) = 1/2·mr² = <span className="fv">{I_cylinder.toFixed(4)}</span><br/>
