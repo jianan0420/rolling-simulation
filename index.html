@@ -363,81 +363,82 @@ function MultiSphereSimulation() {
       <div ref={mountRef} style={{flex:1,width:'100%',position:'relative',minHeight:0}} />
 
       <div style={{background:'linear-gradient(180deg,rgba(10,14,20,0.98) 0%,rgba(16,24,40,0.99) 100%)',borderTop:'1px solid rgba(0,255,170,0.2)',boxShadow:'0 -6px 30px rgba(0,0,0,0.5)',maxHeight:'54vh',overflowY:'auto',overflowX:'hidden',WebkitOverflowScrolling:'touch',padding:'14px 16px 20px'}}>
-
-        {/* 時間拉條 */}
-        <div style={{marginBottom:'10px'}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px'}}>
-            <span className="cl" style={{margin:0}}>運動時間 t</span>
-            <span style={{fontSize:'18px',fontWeight:'bold',color:'#00ff88'}}>
-              {time.toFixed(2)}s <span style={{fontSize:'11px',color:'#555'}}>/ {sliderMax.toFixed(2)}s</span>
-            </span>
+        {/* ── 固定區：時間拉條 + 播放控制，永遠可見 ── */}
+        <div style={{padding:'14px 16px 8px'}}>
+          {/* 時間拉條 */}
+          <div style={{marginBottom:'10px'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px'}}>
+              <span className="cl" style={{margin:0}}>運動時間 t</span>
+              <span style={{fontSize:'18px',fontWeight:'bold',color:'#00ff88'}}>
+                {time.toFixed(2)}s <span style={{fontSize:'11px',color:'#555'}}>/ {sliderMax.toFixed(2)}s</span>
+              </span>
+            </div>
+            <input type="range" min="0" max={sliderMax} step={timeStep} value={time} className="st"
+              onChange={e=>{setPlaying(false);setTime(parseFloat(e.target.value));}}
+              onMouseUp={e=>e.target.blur()}
+              onTouchEnd={e=>e.target.blur()}
+              style={{width:'100%'}} />
           </div>
-          <input type="range" min="0" max={sliderMax} step={timeStep} value={time} className="st"
-            onChange={e=>{setPlaying(false);setTime(parseFloat(e.target.value));}}
-            onMouseUp={e=>e.target.blur()}
-            onTouchEnd={e=>e.target.blur()}
-            style={{width:'100%'}} />
+  
+          {/* 播放控制列 */}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1.4fr 1fr',gap:'8px',marginBottom:'4px',alignItems:'start'}}>
+  
+            {/* 負向加速 */}
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'4px'}}>
+              <div style={{fontSize:'10px',color:'#888',textAlign:'center'}}>
+                <span style={kbdStyle}>←</span> 負向加速
+              </div>
+              <button className="pb"
+                style={{width:'100%',height:'44px',fontSize:'22px',borderColor:'rgba(255,200,80,0.35)',color:speedIdx<=0?'rgba(255,200,80,0.25)':'#ffcc44',background:'rgba(255,200,80,0.07)',opacity:speedIdx<=0?0.4:1}}
+                onClick={()=>{ if(speedIdx>0) handleSetSpeed(SPEEDS[speedIdx-1]); }}>
+                &#x23EA;
+              </button>
+            </div>
+  
+            {/* 播放/暫停 */}
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'4px'}}>
+              <div style={{fontSize:'10px',color:'#888',textAlign:'center'}}>
+                <span style={kbdStyle}>Space</span> 播放/暫停
+              </div>
+              <button className="pb"
+                style={{width:'100%',height:'44px',fontSize:'15px',borderColor:'rgba(0,255,136,0.4)',color:'#00ff88',background:playing?'rgba(0,255,136,0.18)':'rgba(0,255,136,0.07)'}}
+                onClick={()=>setPlaying(p=>!p)}>
+                {playing ? '⏸ 暫停' : '▶ 播放'}
+              </button>
+              <div style={{fontSize:'13px',fontWeight:'bold',color:isNeg?'#ffaa44':'#88aaff',letterSpacing:'1px'}}>
+                {speedLabel}
+              </div>
+            </div>
+  
+            {/* 正向加速 */}
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'4px'}}>
+              <div style={{fontSize:'10px',color:'#888',textAlign:'center'}}>
+                <span style={kbdStyle}>→</span> 正向加速
+              </div>
+              <button className="pb"
+                style={{width:'100%',height:'44px',fontSize:'22px',borderColor:'rgba(255,200,80,0.35)',color:speedIdx>=SPEEDS.length-1?'rgba(255,200,80,0.25)':'#ffcc44',background:'rgba(255,200,80,0.07)',opacity:speedIdx>=SPEEDS.length-1?0.4:1}}
+                onClick={()=>{ if(speedIdx<SPEEDS.length-1) handleSetSpeed(SPEEDS[speedIdx+1]); }}>
+                &#x23E9;
+              </button>
+            </div>
+          </div>
+  
+          {/* 速度刻度列 */}
+          <div style={{display:'flex',justifyContent:'center',gap:'4px',marginBottom:'16px',flexWrap:'wrap'}}>
+            {SPEEDS.map((s,i)=>(
+              <div key={s} onClick={()=>handleSetSpeed(s)}
+                style={{
+                  padding:'2px 7px', borderRadius:'4px', fontSize:'11px', cursor:'pointer',
+                  fontWeight: s===speed?'bold':'normal',
+                  color: s===speed?(s<0?'#ffaa44':'#88aaff'):'#555',
+                  background: s===speed?(s<0?'rgba(255,160,80,0.18)':'rgba(100,150,255,0.15)'):'transparent',
+                  border: `1px solid ${s===speed?(s<0?'rgba(255,160,80,0.4)':'rgba(100,150,255,0.4)'):'rgba(255,255,255,0.1)'}`,
+                }}>
+                {s<0?`◀${Math.abs(s)}`:`${s}▶`}
+              </div>
+            ))}
+          </div>
         </div>
-
-        {/* 播放控制列 */}
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1.4fr 1fr',gap:'8px',marginBottom:'4px',alignItems:'start'}}>
-
-          {/* 負向加速 */}
-          <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'4px'}}>
-            <div style={{fontSize:'10px',color:'#888',textAlign:'center'}}>
-              <span style={kbdStyle}>←</span> 負向加速
-            </div>
-            <button className="pb"
-              style={{width:'100%',height:'44px',fontSize:'22px',borderColor:'rgba(255,200,80,0.35)',color:speedIdx<=0?'rgba(255,200,80,0.25)':'#ffcc44',background:'rgba(255,200,80,0.07)',opacity:speedIdx<=0?0.4:1}}
-              onClick={()=>{ if(speedIdx>0) handleSetSpeed(SPEEDS[speedIdx-1]); }}>
-              &#x23EA;
-            </button>
-          </div>
-
-          {/* 播放/暫停 */}
-          <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'4px'}}>
-            <div style={{fontSize:'10px',color:'#888',textAlign:'center'}}>
-              <span style={kbdStyle}>Space</span> 播放/暫停
-            </div>
-            <button className="pb"
-              style={{width:'100%',height:'44px',fontSize:'15px',borderColor:'rgba(0,255,136,0.4)',color:'#00ff88',background:playing?'rgba(0,255,136,0.18)':'rgba(0,255,136,0.07)'}}
-              onClick={()=>setPlaying(p=>!p)}>
-              {playing ? '⏸ 暫停' : '▶ 播放'}
-            </button>
-            <div style={{fontSize:'13px',fontWeight:'bold',color:isNeg?'#ffaa44':'#88aaff',letterSpacing:'1px'}}>
-              {speedLabel}
-            </div>
-          </div>
-
-          {/* 正向加速 */}
-          <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'4px'}}>
-            <div style={{fontSize:'10px',color:'#888',textAlign:'center'}}>
-              <span style={kbdStyle}>→</span> 正向加速
-            </div>
-            <button className="pb"
-              style={{width:'100%',height:'44px',fontSize:'22px',borderColor:'rgba(255,200,80,0.35)',color:speedIdx>=SPEEDS.length-1?'rgba(255,200,80,0.25)':'#ffcc44',background:'rgba(255,200,80,0.07)',opacity:speedIdx>=SPEEDS.length-1?0.4:1}}
-              onClick={()=>{ if(speedIdx<SPEEDS.length-1) handleSetSpeed(SPEEDS[speedIdx+1]); }}>
-              &#x23E9;
-            </button>
-          </div>
-        </div>
-
-        {/* 速度刻度列 */}
-        <div style={{display:'flex',justifyContent:'center',gap:'4px',marginBottom:'16px',flexWrap:'wrap'}}>
-          {SPEEDS.map((s,i)=>(
-            <div key={s} onClick={()=>handleSetSpeed(s)}
-              style={{
-                padding:'2px 7px', borderRadius:'4px', fontSize:'11px', cursor:'pointer',
-                fontWeight: s===speed?'bold':'normal',
-                color: s===speed?(s<0?'#ffaa44':'#88aaff'):'#555',
-                background: s===speed?(s<0?'rgba(255,160,80,0.18)':'rgba(100,150,255,0.15)'):'transparent',
-                border: `1px solid ${s===speed?(s<0?'rgba(255,160,80,0.4)':'rgba(100,150,255,0.4)'):'rgba(255,255,255,0.1)'}`,
-              }}>
-              {s<0?`◀${Math.abs(s)}`:`${s}▶`}
-            </div>
-          ))}
-        </div>
-
         {/* 參數控制 */}
         <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'14px',marginBottom:'16px',paddingBottom:'16px',borderBottom:'1px solid rgba(0,255,136,0.12)'}}>
           {[
