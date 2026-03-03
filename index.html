@@ -318,8 +318,8 @@ function MultiSphereSimulation() {
     }
   },[time,slopeAngle,slopeHeight,hollowSpherThickness,hollowCylinderThickness,solidArrived,hollowArrived,cylinderArrived,hollowCylArrived]);
 
-  useEffect(()=>{setPlaying(false);setTime(0);},[slopeAngle,slopeHeight]);
-  useEffect(()=>{setPlaying(false);setTime(0);},[hollowSpherThickness,hollowCylinderThickness]);
+  useEffect(()=>{setPlaying(false);setTime(0);setSpeed(1);speedRef.current=1;speedIdxRef.current=7;},[slopeAngle,slopeHeight]);
+  useEffect(()=>{setPlaying(false);setTime(0);setSpeed(1);speedRef.current=1;speedIdxRef.current=7;},[hollowSpherThickness,hollowCylinderThickness]);
 
   const y_solid      = calculateY(time,I_solid);
   const k_solid      = calculateK(time,I_solid);
