@@ -382,10 +382,10 @@ function MultiSphereSimulation() {
         {/* 播放控制列 */}
         <div style={{display:'grid',gridTemplateColumns:'1fr 1.4fr 1fr',gap:'8px',marginBottom:'4px',alignItems:'start'}}>
 
-          {/* 減速 */}
+          {/* 負向加速 */}
           <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'4px'}}>
             <div style={{fontSize:'10px',color:'#888',textAlign:'center'}}>
-              <span style={kbdStyle}>←</span> 減速
+              <span style={kbdStyle}>←</span> 負向加速
             </div>
             <button className="pb"
               style={{width:'100%',height:'44px',fontSize:'22px',borderColor:'rgba(255,200,80,0.35)',color:speedIdx<=0?'rgba(255,200,80,0.25)':'#ffcc44',background:'rgba(255,200,80,0.07)',opacity:speedIdx<=0?0.4:1}}
@@ -409,10 +409,10 @@ function MultiSphereSimulation() {
             </div>
           </div>
 
-          {/* 加速 */}
+          {/* 正向加速 */}
           <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'4px'}}>
             <div style={{fontSize:'10px',color:'#888',textAlign:'center'}}>
-              <span style={kbdStyle}>→</span> 加速
+              <span style={kbdStyle}>→</span> 正向加速
             </div>
             <button className="pb"
               style={{width:'100%',height:'44px',fontSize:'22px',borderColor:'rgba(255,200,80,0.35)',color:speedIdx>=SPEEDS.length-1?'rgba(255,200,80,0.25)':'#ffcc44',background:'rgba(255,200,80,0.07)',opacity:speedIdx>=SPEEDS.length-1?0.4:1}}
