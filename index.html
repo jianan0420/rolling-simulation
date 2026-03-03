@@ -194,20 +194,10 @@ function MultiSphereSimulation() {
       return '#'+[L((ai>>16)&0xff,(bi>>16)&0xff),L((ai>>8)&0xff,(bi>>8)&0xff),L(ai&0xff,bi&0xff)].map(v=>v.toString(16).padStart(2,'0')).join('');
     };
     const hT=(hollowSpherThickness-0.01)/0.98*0.85;
-    const solidSphereTex=mkStripes('
-#ff5533','
-#880011');
-    const hollowSphereTex=mkStripes(lerpHex('
-#ffccbb','
-#ff5533',hT),lerpHex('
-#cc8877','
-#880011',hT));
-    const solidCylTex=mkStripes('
-#2244dd','
-#001177');
-    const hollowCylTex=mkStripes('
-#2244dd','
-#001177');
+    const solidSphereTex=mkStripes('#ff5533','#880011');
+    const hollowSphereTex=mkStripes(lerpHex('#ffccbb','#ff5533',hT),lerpHex('#cc8877','#880011',hT));
+    const solidCylTex=mkStripes('#2244dd','#001177');
+    const hollowCylTex=mkStripes('#2244dd','#001177');
 
     const sphere=new THREE.Mesh(new THREE.SphereGeometry(r,32,32),new THREE.MeshPhongMaterial({map:solidSphereTex,shininess:80}));
     sphere.castShadow=true; scene.add(sphere); sphereRef.current=sphere;
@@ -247,14 +237,11 @@ function MultiSphereSimulation() {
       sp.scale.set(2.4,1.2,1); return sp;
     };
     scene.add(new THREE.ArrowHelper(new THREE.Vector3(1,0,0),axO,axL,0xff3333,0.4,0.25));
-    const lX=mkLbl('+X','
-#ff8888'); lX.position.set(axO.x+axL+0.9,axO.y,axO.z); scene.add(lX);
+    const lX=mkLbl('+X','#ff8888'); lX.position.set(axO.x+axL+0.9,axO.y,axO.z); scene.add(lX);
     scene.add(new THREE.ArrowHelper(new THREE.Vector3(0,1,0),axO,axL,0x33ff55,0.4,0.25));
-    const lY=mkLbl('+Y','
-#88ffaa'); lY.position.set(axO.x,axO.y+axL+0.6,axO.z); scene.add(lY);
+    const lY=mkLbl('+Y','#88ffaa'); lY.position.set(axO.x,axO.y+axL+0.6,axO.z); scene.add(lY);
     scene.add(new THREE.ArrowHelper(new THREE.Vector3(0,0,1),axO,axL,0x3388ff,0.4,0.25));
-    const lZ=mkLbl('+Z','
-#88ccff'); lZ.position.set(axO.x,axO.y,axO.z+axL+0.9); scene.add(lZ);
+    const lZ=mkLbl('+Z','#88ccff'); lZ.position.set(axO.x,axO.y,axO.z+axL+0.9); scene.add(lZ);
 
     const handleResize=()=>{
       if(!mountRef.current) return;
@@ -297,10 +284,8 @@ function MultiSphereSimulation() {
       const cv=document.createElement('canvas'); cv.width=cv.height=256;
       const ctx=cv.getContext('2d');
       ctx.fillStyle='rgba(0,0,0,0.8)'; ctx.beginPath(); ctx.arc(128,128,120,0,Math.PI*2); ctx.fill();
-      ctx.strokeStyle='
-#ffff00'; ctx.lineWidth=4; ctx.beginPath(); ctx.arc(128,128,120,0,Math.PI*2); ctx.stroke();
-      ctx.fillStyle='
-#ffff00'; ctx.font='bold 120px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(rank,128,128);
+      ctx.strokeStyle='#ffff00'; ctx.lineWidth=4; ctx.beginPath(); ctx.arc(128,128,120,0,Math.PI*2); ctx.stroke();
+      ctx.fillStyle='#ffff00'; ctx.font='bold 120px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(rank,128,128);
       const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv)}));
       sp.scale.set(1.5,1.5,1.5); sp.position.copy(mesh.position); sp.position.y+=2; rl.add(sp);
     };
@@ -348,7 +333,7 @@ function MultiSphereSimulation() {
 
   const speedIdx = SPEEDS.indexOf(speed);
   const isNeg    = speed < 0;
-  const speedLabel = isNeg ? ◀ ${Math.abs(speed)}x : ${speed}x ▶;
+  const speedLabel = isNeg ? `◀ ${Math.abs(speed)}x` : `${speed}x ▶`;
 
   const kbdStyle = {
     display:'inline-block', fontSize:'10px', color:'#aaa',
@@ -357,9 +342,8 @@ function MultiSphereSimulation() {
   };
 
   return (
-    <div style={{width:'100%',height:'100vh',display:'flex',flexDirection:'column',backgroundColor:'
-#0f1419',color:'#fff',fontFamily:"'JetBrains Mono','Courier New',monospace",userSelect:'none',touchAction:'pan-y'}}>
-      <style>{
+    <div style={{width:'100%',height:'100vh',display:'flex',flexDirection:'column',backgroundColor:'#0f1419',color:'#fff',fontFamily:"'JetBrains Mono','Courier New',monospace",userSelect:'none',touchAction:'pan-y'}}>
+      <style>{`
         * { -webkit-tap-highlight-color:transparent; box-sizing:border-box; }
         .sa{accent-color:#ff6464}.sh{accent-color:#64c864}.ss{accent-color:#ff8888}.sc{accent-color:#8888ff}.st{accent-color:#00ff88}
         input[type=range]{-webkit-appearance:none;appearance:none;height:8px;border-radius:4px;cursor:pointer;outline:none;border:none;background:rgba(255,255,255,0.12);touch-action:none;}
@@ -374,9 +358,9 @@ function MultiSphereSimulation() {
         .fk{color:#ffff88;}.fv{color:#aaddff;}
         .pb{display:flex;align-items:center;justify-content:center;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:bold;border:1px solid;touch-action:manipulation;-webkit-tap-highlight-color:transparent;background:none;}
         .pb:active{opacity:0.65;}
-      }</style>
+      `}</style>
 
-      <div ref={mountRef} style={{flex:1,width:'100%',position:'relative',minHeight:0}} />
+      <div ref={mountRef} style={{flex:'0 0 50vh',width:'100%',position:'relative',minHeight:0}} />
 
       {/* 底部面板外層：固定不滾動 */}
       <div style={{
@@ -391,8 +375,7 @@ function MultiSphereSimulation() {
           <div style={{marginBottom:'10px'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px'}}>
               <span className="cl" style={{margin:0}}>運動時間 t</span>
-              <span style={{fontSize:'18px',fontWeight:'bold',color:'
-#00ff88'}}>
+              <span style={{fontSize:'18px',fontWeight:'bold',color:'#00ff88'}}>
                 {time.toFixed(2)}s <span style={{fontSize:'11px',color:'#555'}}>/ {sliderMax.toFixed(2)}s</span>
               </span>
             </div>
@@ -402,55 +385,50 @@ function MultiSphereSimulation() {
               onTouchEnd={e=>e.target.blur()}
               style={{width:'100%'}} />
           </div>
-
+  
           {/* 播放控制列 */}
           <div style={{display:'grid',gridTemplateColumns:'1fr 1.4fr 1fr',gap:'8px',marginBottom:'4px',alignItems:'start'}}>
-
+  
             {/* 負向加速 */}
             <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'4px'}}>
               <div style={{fontSize:'10px',color:'#888',textAlign:'center'}}>
                 <span style={kbdStyle}>←</span> 負向加速
               </div>
               <button className="pb"
-                style={{width:'100%',height:'44px',fontSize:'22px',borderColor:'rgba(255,200,80,0.35)',color:speedIdx<=0?'rgba(255,200,80,0.25)':'
-#ffcc44',background:'rgba(255,200,80,0.07)',opacity:speedIdx<=0?0.4:1}}
+                style={{width:'100%',height:'44px',fontSize:'22px',borderColor:'rgba(255,200,80,0.35)',color:speedIdx<=0?'rgba(255,200,80,0.25)':'#ffcc44',background:'rgba(255,200,80,0.07)',opacity:speedIdx<=0?0.4:1}}
                 onClick={()=>{ if(speedIdx>0) handleSetSpeed(SPEEDS[speedIdx-1]); }}>
                 &#x23EA;
               </button>
             </div>
-
+  
             {/* 播放/暫停 */}
             <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'4px'}}>
               <div style={{fontSize:'10px',color:'#888',textAlign:'center'}}>
                 <span style={kbdStyle}>Space</span> 播放/暫停
               </div>
               <button className="pb"
-                style={{width:'100%',height:'44px',fontSize:'15px',borderColor:'rgba(0,255,136,0.4)',color:'
-#00ff88',background:playing?'rgba(0,255,136,0.18)':'rgba(0,255,136,0.07)'}}
+                style={{width:'100%',height:'44px',fontSize:'15px',borderColor:'rgba(0,255,136,0.4)',color:'#00ff88',background:playing?'rgba(0,255,136,0.18)':'rgba(0,255,136,0.07)'}}
                 onClick={()=>setPlaying(p=>!p)}>
                 {playing ? '⏸ 暫停' : '▶ 播放'}
               </button>
-              <div style={{fontSize:'13px',fontWeight:'bold',color:isNeg?'
-#ffaa44':'
-#88aaff',letterSpacing:'1px'}}>
+              <div style={{fontSize:'13px',fontWeight:'bold',color:isNeg?'#ffaa44':'#88aaff',letterSpacing:'1px'}}>
                 {speedLabel}
               </div>
             </div>
-
+  
             {/* 正向加速 */}
             <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'4px'}}>
               <div style={{fontSize:'10px',color:'#888',textAlign:'center'}}>
                 <span style={kbdStyle}>→</span> 正向加速
               </div>
               <button className="pb"
-                style={{width:'100%',height:'44px',fontSize:'22px',borderColor:'rgba(255,200,80,0.35)',color:speedIdx>=SPEEDS.length-1?'rgba(255,200,80,0.25)':'
-#ffcc44',background:'rgba(255,200,80,0.07)',opacity:speedIdx>=SPEEDS.length-1?0.4:1}}
+                style={{width:'100%',height:'44px',fontSize:'22px',borderColor:'rgba(255,200,80,0.35)',color:speedIdx>=SPEEDS.length-1?'rgba(255,200,80,0.25)':'#ffcc44',background:'rgba(255,200,80,0.07)',opacity:speedIdx>=SPEEDS.length-1?0.4:1}}
                 onClick={()=>{ if(speedIdx<SPEEDS.length-1) handleSetSpeed(SPEEDS[speedIdx+1]); }}>
                 &#x23E9;
               </button>
             </div>
           </div>
-
+  
           {/* 速度刻度列 */}
           <div style={{display:'flex',justifyContent:'center',gap:'4px',marginBottom:'16px',flexWrap:'wrap'}}>
             {SPEEDS.map((s,i)=>(
@@ -458,20 +436,18 @@ function MultiSphereSimulation() {
                 style={{
                   padding:'2px 7px', borderRadius:'4px', fontSize:'11px', cursor:'pointer',
                   fontWeight: s===speed?'bold':'normal',
-                  color: s===speed?(s<0?'
-#ffaa44':'
-#88aaff'):'#555',
+                  color: s===speed?(s<0?'#ffaa44':'#88aaff'):'#555',
                   background: s===speed?(s<0?'rgba(255,160,80,0.18)':'rgba(100,150,255,0.15)'):'transparent',
-                  border: 1px solid ${s===speed?(s<0?'rgba(255,160,80,0.4)':'rgba(100,150,255,0.4)'):'rgba(255,255,255,0.1)'},
+                  border: `1px solid ${s===speed?(s<0?'rgba(255,160,80,0.4)':'rgba(100,150,255,0.4)'):'rgba(255,255,255,0.1)'}`,
                 }}>
-                {s<0?◀${Math.abs(s)}:${s}▶}
+                {s<0?`◀${Math.abs(s)}`:`${s}▶`}
               </div>
             ))}
           </div>
         </div>
         {/* ── 可滾動區：參數、數據、公式 ── */}
         <div style={{
-          maxHeight:'36vh',
+          maxHeight:'calc(50vh - 130px)',
           overflowY:'auto',
           overflowX:'hidden',
           WebkitOverflowScrolling:'touch',
@@ -480,14 +456,10 @@ function MultiSphereSimulation() {
           {/* 參數控制 */}
           <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'14px',marginBottom:'16px',paddingBottom:'16px',borderBottom:'1px solid rgba(0,255,136,0.12)'}}>
             {[
-              {label:'θ 斜面角度', cls:'sa',min:1,   max:89,  step:1,   val:slopeAngle,             set:setSlopeAngle,             unit:'°', color:'
-#ff6464',toFixed:1},
-              {label:'斜面高度 H', cls:'sh',min:1,   max:30,  step:0.5, val:slopeHeight,            set:setSlopeHeight,            unit:' m',color:'
-#64c864',toFixed:1},
-              {label:'空心球壁厚 x',cls:'ss',min:0.01,max:0.99,step:0.01,val:hollowSpherThickness,   set:setHollowSphereThickness,  unit:'',  color:'
-#ff8888',toFixed:2},
-              {label:'空心柱壁厚 x',cls:'sc',min:0.01,max:0.99,step:0.01,val:hollowCylinderThickness,set:setHollowCylinderThickness,unit:'',  color:'
-#8888ff',toFixed:2},
+              {label:'θ 斜面角度', cls:'sa',min:1,   max:89,  step:1,   val:slopeAngle,             set:setSlopeAngle,             unit:'°', color:'#ff6464',toFixed:1},
+              {label:'斜面高度 H', cls:'sh',min:1,   max:30,  step:0.5, val:slopeHeight,            set:setSlopeHeight,            unit:' m',color:'#64c864',toFixed:1},
+              {label:'空心球壁厚 x',cls:'ss',min:0.01,max:0.99,step:0.01,val:hollowSpherThickness,   set:setHollowSphereThickness,  unit:'',  color:'#ff8888',toFixed:2},
+              {label:'空心柱壁厚 x',cls:'sc',min:0.01,max:0.99,step:0.01,val:hollowCylinderThickness,set:setHollowCylinderThickness,unit:'',  color:'#8888ff',toFixed:2},
             ].map(({label,cls,min,max,step,val,set,unit,color,toFixed})=>(
               <div key={label}>
                 <div className="cl">{label}</div>
@@ -505,35 +477,28 @@ function MultiSphereSimulation() {
               </div>
             ))}
           </div>
-
+  
           {/* 四個物體數據 */}
           <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'10px',marginBottom:'16px'}}>
             {[
-              {label:'實心球',   sub:'',                                       color:'
-#ff6464',bg:'rgba(255,68,68,0.1)',   border:'rgba(255,68,68,0.3)',  I:I_solid,         y:y_solid,      k:k_solid,      arrived:solidArrived,    maxT:maxTime_solid},
-              {label:'空心球',   sub: x=${hollowSpherThickness.toFixed(2)},   color:'
-#ff8888',bg:'rgba(255,100,68,0.08)',border:'rgba(255,100,100,0.3)',I:I_hollowSphere,  y:y_hollow,     k:k_hollow,     arrived:hollowArrived,   maxT:maxTime_hollowSphere},
-              {label:'實心圓柱', sub:'',                                       color:'
-#6464ff',bg:'rgba(68,68,255,0.1)',   border:'rgba(68,68,255,0.3)',  I:I_cylinder,      y:y_cylinder,   k:k_cylinder,   arrived:cylinderArrived, maxT:maxTime_cylinder},
-              {label:'空心圓柱', sub: x=${hollowCylinderThickness.toFixed(2)},color:'
-#8888ff',bg:'rgba(68,68,255,0.08)', border:'rgba(100,100,255,0.3)',I:I_hollowCylinder,y:y_hollow_cyl, k:k_hollow_cyl, arrived:hollowCylArrived,maxT:maxTime_hollowCylinder},
+              {label:'實心球',   sub:'',                                       color:'#ff6464',bg:'rgba(255,68,68,0.1)',   border:'rgba(255,68,68,0.3)',  I:I_solid,         y:y_solid,      k:k_solid,      arrived:solidArrived,    maxT:maxTime_solid},
+              {label:'空心球',   sub:` x=${hollowSpherThickness.toFixed(2)}`,   color:'#ff8888',bg:'rgba(255,100,68,0.08)',border:'rgba(255,100,100,0.3)',I:I_hollowSphere,  y:y_hollow,     k:k_hollow,     arrived:hollowArrived,   maxT:maxTime_hollowSphere},
+              {label:'實心圓柱', sub:'',                                       color:'#6464ff',bg:'rgba(68,68,255,0.1)',   border:'rgba(68,68,255,0.3)',  I:I_cylinder,      y:y_cylinder,   k:k_cylinder,   arrived:cylinderArrived, maxT:maxTime_cylinder},
+              {label:'空心圓柱', sub:` x=${hollowCylinderThickness.toFixed(2)}`,color:'#8888ff',bg:'rgba(68,68,255,0.08)', border:'rgba(100,100,255,0.3)',I:I_hollowCylinder,y:y_hollow_cyl, k:k_hollow_cyl, arrived:hollowCylArrived,maxT:maxTime_hollowCylinder},
             ].map(({label,sub,color,bg,border,I,y,k,arrived,maxT})=>(
-              <div key={label} className="card" style={{background:bg,border:1px solid ${border}}}>
+              <div key={label} className="card" style={{background:bg,border:`1px solid ${border}`}}>
                 <div style={{color,fontWeight:'bold',marginBottom:'4px'}}>{label}{sub}</div>
                 <div style={{color:'#ccc'}}>轉動慣量 = {I.toFixed(3)}</div>
                 <div style={{color:'#ccc'}}>下降距離 = {y.toFixed(3)} m</div>
                 <div style={{color:'#ccc'}}>旋轉角度 = {(k*180/Math.PI).toFixed(1)}°</div>
-                {arrived&&<div style={{color:'
-#ffff44',marginTop:'4px',fontSize:'11px'}}>✓ {maxT.toFixed(2)}s — 第{rankList.indexOf(maxT)+1}名</div>}
+                {arrived&&<div style={{color:'#ffff44',marginTop:'4px',fontSize:'11px'}}>✓ {maxT.toFixed(2)}s — 第{rankList.indexOf(maxT)+1}名</div>}
               </div>
             ))}
           </div>
           {/* 公式區 */}
           <div style={{background:'rgba(0,255,136,0.04)',border:'1px solid rgba(0,255,136,0.12)',borderRadius:'10px',padding:'14px',fontSize:'11px',fontFamily:"'Courier New',monospace",lineHeight:'2.0',color:'#ccc'}}>
-            <div style={{color:'
-#00ff88',fontWeight:'bold',marginBottom:'10px',fontSize:'12px',letterSpacing:'1px'}}>基本公式</div>
-            <div style={{color:'
-#ffff88',marginBottom:'8px'}}>r={r} m | m={m} kg | g={g} m/s² | θ={slopeAngle}°</div>
+            <div style={{color:'#00ff88',fontWeight:'bold',marginBottom:'10px',fontSize:'12px',letterSpacing:'1px'}}>基本公式</div>
+            <div style={{color:'#ffff88',marginBottom:'8px'}}>r={r} m | m={m} kg | g={g} m/s² | θ={slopeAngle}°</div>
             <div style={{marginBottom:'10px'}}>
               <span className="fk">轉動慣量：</span><br/>
               I(實心球) = 2/5·mr² = <span className="fv">{I_solid.toFixed(4)}</span><br/>
