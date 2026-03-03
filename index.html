@@ -374,6 +374,8 @@ function MultiSphereSimulation() {
           </div>
           <input type="range" min="0" max={sliderMax} step={timeStep} value={time} className="st"
             onChange={e=>{setPlaying(false);setTime(parseFloat(e.target.value));}}
+            onMouseUp={e=>e.target.blur()}
+            onTouchEnd={e=>e.target.blur()}
             style={{width:'100%'}} />
         </div>
 
@@ -448,9 +450,15 @@ function MultiSphereSimulation() {
               <div className="cl">{label}</div>
               <div className="cr">
                 <input type="range" min={min} max={max} step={step} value={val} className={cls}
-                  onChange={e=>set(parseFloat(e.target.value))} style={{flex:1}} />
+                  onChange={e=>set(parseFloat(e.target.value))} 
+                  onMouseUp={e=>e.target.blur()}
+                  onTouchEnd={e=>e.target.blur()}
+                  style={{flex:1}} />
                 <input type="number" min={min} max={max} step={step} value={val}
-                  onChange={e=>set(parseFloat(e.target.value)||min)} style={{width:'52px'}} />
+                  onChange={e=>set(parseFloat(e.target.value)||min)} 
+                  onMouseUp={e=>e.target.blur()}
+                  onTouchEnd={e=>e.target.blur()}
+                  style={{width:'52px'}} />
               </div>
               <div className="cv" style={{color}}>{val.toFixed(toFixed)}{unit}</div>
             </div>
