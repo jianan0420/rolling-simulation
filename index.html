@@ -20,580 +20,602 @@
     const { useState, useEffect, useRef } = React;
 
 function MultiSphereSimulation() {
-const mountRef = useRef(null);
-const rendererRef = useRef(null);
-const cameraRef = useRef(null);
+  const mountRef = useRef(null);
+  const rendererRef = useRef(null);
+  const cameraRef = useRef(null);
 
-const sphereRef = useRef(null);
-const hollowSphereRef = useRef(null);
-const cylinderRef = useRef(null);
-const hollowCylinderRef = useRef(null);
+  const sphereRef = useRef(null);
+  const hollowSphereRef = useRef(null);
+  const cylinderRef = useRef(null);
+  const hollowCylinderRef = useRef(null);
 
-const rankingLabelRef = useRef(null);
-const trailRef = useRef(null);
+  const rankingLabelRef = useRef(null);
+  const trailRef = useRef(null);
 
-const [time, setTime] = useState(0);
-const [slopeAngle, setSlopeAngle] = useState(30);
-const [slopeHeight, setSlopeHeight] = useState(10);
-const [hollowSpherThickness, setHollowSphereThickness] = useState(0.5);
-const [hollowCylinderThickness, setHollowCylinderThickness] = useState(0.5);
+  const [time, setTime] = useState(0);
+  const [slopeAngle, setSlopeAngle] = useState(30);
+  const [slopeHeight, setSlopeHeight] = useState(10);
+  const [hollowSpherThickness, setHollowSphereThickness] = useState(0.5);
+  const [hollowCylinderThickness, setHollowCylinderThickness] = useState(0.5);
 
-const timeStep = 0.02;
-const gap = 1;
-const r = 1;
-const m = 1;
-const g = 9.8;
-const I_solid = (2 / 5) * m * r * r;
-const theta = (slopeAngle * Math.PI) / 180;
-const I_hollowSphere = 0.4 * ((1 - Math.pow(1 - hollowSpherThickness, 5)) / (1 - Math.pow(1 - hollowSpherThickness, 3))) * m * r * r;
-const I_cylinder = 0.5 * m * r * r;
-const I_hollowCylinder = 0.5 * ((1 - Math.pow(1 - hollowCylinderThickness, 4)) / (1 - Math.pow(1 - hollowCylinderThickness, 2))) * m * r * r;
+  const timeStep = 0.02;
+  const gap = 1;
+  const r = 1;
+  const m = 1;
+  const g = 9.8;
+  const I_solid = (2 / 5) * m * r * r;
+  const theta = (slopeAngle * Math.PI) / 180;
+  const I_hollowSphere = 0.4 * ((1 - Math.pow(1 - hollowSpherThickness, 5)) / (1 - Math.pow(1 - hollowSpherThickness, 3))) * m * r * r;
+  const I_cylinder = 0.5 * m * r * r;
+  const I_hollowCylinder = 0.5 * ((1 - Math.pow(1 - hollowCylinderThickness, 4)) / (1 - Math.pow(1 - hollowCylinderThickness, 2))) * m * r * r;
 
-const calculateY = (t, I) => {
-const coefficient = (m * r * r * g) / (m * r * r + I);
-const sinTheta = Math.sin(theta);
-return coefficient * ((sinTheta * sinTheta * t * t) / 2);
-};
+  const calculateY = (t, I) => {
+    const coefficient = (m * r * r * g) / (m * r * r + I);
+    const sinTheta = Math.sin(theta);
+    return coefficient * ((sinTheta * sinTheta * t * t) / 2);
+  };
 
-const calculateK = (t, I) => {
-const y = calculateY(t, I);
-const sinTheta = Math.sin(theta);
-const kDegrees = (y / sinTheta) * (180 / (r * Math.PI));
-return (kDegrees * Math.PI) / 180;
-};
+  const calculateK = (t, I) => {
+    const y = calculateY(t, I);
+    const sinTheta = Math.sin(theta);
+    const kDegrees = (y / sinTheta) * (180 / (r * Math.PI));
+    return (kDegrees * Math.PI) / 180;
+  };
 
-const calculateMaxTimeForI = (I) => {
-const coefficient = (m * r * r * g) / (m * r * r + I);
-const sinTheta = Math.sin(theta);
-let t_squared = (2 * slopeHeight) / (coefficient * sinTheta * sinTheta);
-let t = Math.sqrt(Math.max(t_squared, 0.01));
-let low = t * 0.99;
-let high = t * 1.05;
-for (let i = 0; i < 20; i++) {
-const mid = (low + high) / 2;
-const y = calculateY(mid, I);
-if (y < slopeHeight) { low = mid; } else { high = mid; }
-}
-return high;
-};
+  const calculateMaxTimeForI = (I) => {
+    const coefficient = (m * r * r * g) / (m * r * r + I);
+    const sinTheta = Math.sin(theta);
+    let t_squared = (2 * slopeHeight) / (coefficient * sinTheta * sinTheta);
+    let t = Math.sqrt(Math.max(t_squared, 0.01));
+    let low = t * 0.99;
+    let high = t * 1.05;
+    for (let i = 0; i < 20; i++) {
+      const mid = (low + high) / 2;
+      const y = calculateY(mid, I);
+      if (y < slopeHeight) { low = mid; } else { high = mid; }
+    }
+    return high;
+  };
 
-const maxTime_solid = calculateMaxTimeForI(I_solid);
-const maxTime_hollowSphere = calculateMaxTimeForI(I_hollowSphere);
-const maxTime_cylinder = calculateMaxTimeForI(I_cylinder);
-const maxTime_hollowCylinder = calculateMaxTimeForI(I_hollowCylinder);
-const maxTime = Math.max(maxTime_solid, maxTime_hollowSphere, maxTime_cylinder, maxTime_hollowCylinder);
-const sliderMax = Math.ceil(maxTime / timeStep) * timeStep;
+  const maxTime_solid = calculateMaxTimeForI(I_solid);
+  const maxTime_hollowSphere = calculateMaxTimeForI(I_hollowSphere);
+  const maxTime_cylinder = calculateMaxTimeForI(I_cylinder);
+  const maxTime_hollowCylinder = calculateMaxTimeForI(I_hollowCylinder);
+  const maxTime = Math.max(maxTime_solid, maxTime_hollowSphere, maxTime_cylinder, maxTime_hollowCylinder);
+  const sliderMax = Math.ceil(maxTime / timeStep) * timeStep;
 
-const hasReachedHeight = (t, I) => calculateY(t, I) > slopeHeight;
+  const hasReachedHeight = (t, I) => calculateY(t, I) > slopeHeight;
 
-const getObjectPosition = (t, I, zOffset) => {
-const y = calculateY(t, I);
-const clampedY = Math.min(y, slopeHeight);
-const tanTheta = Math.tan(theta);
-return new THREE.Vector3(clampedY / tanTheta, r - clampedY, zOffset);
-};
+  const getObjectPosition = (t, I, zOffset) => {
+    const y = calculateY(t, I);
+    const clampedY = Math.min(y, slopeHeight);
+    const tanTheta = Math.tan(theta);
+    return new THREE.Vector3(clampedY / tanTheta, r - clampedY, zOffset);
+  };
 
-const getPointPosition = (t, I, zOffset) => {
-const y = calculateY(t, I);
-const clampedY = Math.min(y, slopeHeight);
-const k = calculateK(t, I);
-const tanTheta = Math.tan(theta);
-const sinKHalf = Math.sin(k / 2);
-const cosKHalf = Math.cos(k / 2);
-return new THREE.Vector3(
-clampedY / tanTheta - 2 * r * sinKHalf * cosKHalf,
-2 * r * sinKHalf * sinKHalf - clampedY,
-zOffset
-);
-};
+  const getPointPosition = (t, I, zOffset) => {
+    const y = calculateY(t, I);
+    const clampedY = Math.min(y, slopeHeight);
+    const k = calculateK(t, I);
+    const tanTheta = Math.tan(theta);
+    const sinKHalf = Math.sin(k / 2);
+    const cosKHalf = Math.cos(k / 2);
+    return new THREE.Vector3(
+      clampedY / tanTheta - 2 * r * sinKHalf * cosKHalf,
+      2 * r * sinKHalf * sinKHalf - clampedY,
+      zOffset
+    );
+  };
 
-const staticRankTableRef = useRef({});
+  const staticRankTableRef = useRef({});
 
-useEffect(() => {
-const entries = [
-{ name: ‘solid’,     arrivalTime: maxTime_solid },
-{ name: ‘hollow’,    arrivalTime: maxTime_hollowSphere },
-{ name: ‘cylinder’,  arrivalTime: maxTime_cylinder },
-{ name: ‘hollowCyl’, arrivalTime: maxTime_hollowCylinder },
-];
-entries.sort((a, b) => a.arrivalTime - b.arrivalTime);
-const table = {};
-entries.forEach((obj, idx) => {
-table[obj.name] = { rank: idx + 1, arrivalTime: obj.arrivalTime };
-});
-staticRankTableRef.current = table;
-}, [maxTime_solid, maxTime_hollowSphere, maxTime_cylinder, maxTime_hollowCylinder]);
+  useEffect(() => {
+    const entries = [
+      { name: 'solid',     arrivalTime: maxTime_solid },
+      { name: 'hollow',    arrivalTime: maxTime_hollowSphere },
+      { name: 'cylinder',  arrivalTime: maxTime_cylinder },
+      { name: 'hollowCyl', arrivalTime: maxTime_hollowCylinder },
+    ];
+    entries.sort((a, b) => a.arrivalTime - b.arrivalTime);
+    const table = {};
+    entries.forEach((obj, idx) => {
+      table[obj.name] = { rank: idx + 1, arrivalTime: obj.arrivalTime };
+    });
+    staticRankTableRef.current = table;
+  }, [maxTime_solid, maxTime_hollowSphere, maxTime_cylinder, maxTime_hollowCylinder]);
 
-const [solidArrived,     setSolidArrived]     = useState(false);
-const [hollowArrived,    setHollowArrived]    = useState(false);
-const [cylinderArrived,  setCylinderArrived]  = useState(false);
-const [hollowCylArrived, setHollowCylArrived] = useState(false);
+  const [solidArrived,     setSolidArrived]     = useState(false);
+  const [hollowArrived,    setHollowArrived]    = useState(false);
+  const [cylinderArrived,  setCylinderArrived]  = useState(false);
+  const [hollowCylArrived, setHollowCylArrived] = useState(false);
 
-const arrivalTolerance = slopeHeight * 0.005;
+  const arrivalTolerance = slopeHeight * 0.005;
 
-useEffect(() => {
-setSolidArrived(calculateY(time, I_solid) >= slopeHeight - arrivalTolerance);
-}, [time, maxTime_solid]);
+  useEffect(() => {
+    setSolidArrived(calculateY(time, I_solid) >= slopeHeight - arrivalTolerance);
+  }, [time, maxTime_solid]);
 
-useEffect(() => {
-setHollowArrived(calculateY(time, I_hollowSphere) >= slopeHeight - arrivalTolerance);
-}, [time, maxTime_hollowSphere]);
+  useEffect(() => {
+    setHollowArrived(calculateY(time, I_hollowSphere) >= slopeHeight - arrivalTolerance);
+  }, [time, maxTime_hollowSphere]);
 
-useEffect(() => {
-setCylinderArrived(calculateY(time, I_cylinder) >= slopeHeight - arrivalTolerance);
-}, [time, maxTime_cylinder]);
+  useEffect(() => {
+    setCylinderArrived(calculateY(time, I_cylinder) >= slopeHeight - arrivalTolerance);
+  }, [time, maxTime_cylinder]);
 
-useEffect(() => {
-setHollowCylArrived(calculateY(time, I_hollowCylinder) >= slopeHeight - arrivalTolerance);
-}, [time, maxTime_hollowCylinder]);
+  useEffect(() => {
+    setHollowCylArrived(calculateY(time, I_hollowCylinder) >= slopeHeight - arrivalTolerance);
+  }, [time, maxTime_hollowCylinder]);
 
-const getRankIfArrived = (name, arrived) => {
-if (!arrived) return null;
-return staticRankTableRef.current[name]?.rank ?? null;
-};
+  const getRankIfArrived = (name, arrived) => {
+    if (!arrived) return null;
+    return staticRankTableRef.current[name]?.rank ?? null;
+  };
 
-useEffect(() => {
-if (!mountRef.current) return;
-const width = mountRef.current.clientWidth;
-const height = mountRef.current.clientHeight;
+  useEffect(() => {
+    if (!mountRef.current) return;
+    const width = mountRef.current.clientWidth;
+    const height = mountRef.current.clientHeight;
 
-```
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0f1419);
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0f1419);
 
-const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
-camera.position.set(8, 8, 13);
-camera.lookAt(8, -5, 0);
-cameraRef.current = camera;
+    const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
+    camera.position.set(8, 8, 13);
+    camera.lookAt(8, -5, 0);
+    cameraRef.current = camera;
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(width, height);
-renderer.setPixelRatio(window.devicePixelRatio);
-renderer.shadowMap.enabled = true;
-mountRef.current.appendChild(renderer.domElement);
-rendererRef.current = renderer;
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(width, height);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.shadowMap.enabled = true;
+    mountRef.current.appendChild(renderer.domElement);
+    rendererRef.current = renderer;
 
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-scene.add(ambientLight);
-const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-directionalLight.position.set(10, 10, 5);
-directionalLight.castShadow = true;
-directionalLight.shadow.mapSize.width = 2048;
-directionalLight.shadow.mapSize.height = 2048;
-scene.add(directionalLight);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    directionalLight.position.set(10, 10, 5);
+    directionalLight.castShadow = true;
+    directionalLight.shadow.mapSize.width = 2048;
+    directionalLight.shadow.mapSize.height = 2048;
+    scene.add(directionalLight);
 
-const sinTheta = Math.sin(theta);
-const cosTheta = Math.cos(theta);
-const slopeWidthX = slopeHeight / sinTheta;
-const slopeWidthZ = 2 * (4 * r + 2 * gap);
+    const sinTheta = Math.sin(theta);
+    const cosTheta = Math.cos(theta);
+    const slopeWidthX = slopeHeight / sinTheta;
+    const slopeWidthZ = 2 * (4 * r + 2 * gap);
 
-const slopeGeometry = new THREE.PlaneGeometry(slopeWidthX, slopeWidthZ);
-const slopeMaterial = new THREE.MeshPhongMaterial({ color: 0x3a6a8a, shininess: 20, side: THREE.DoubleSide });
-const slope = new THREE.Mesh(slopeGeometry, slopeMaterial);
-const quatX = new THREE.Quaternion();
-quatX.setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
-const quatZ = new THREE.Quaternion();
-quatZ.setFromAxisAngle(new THREE.Vector3(0, 0, 1), -theta);
-slope.quaternion.multiplyQuaternions(quatZ, quatX);
-const positionX = (slopeWidthX / 2) * cosTheta;
-const positionY = -slopeHeight / 2 - r / cosTheta;
-slope.position.set(positionX, positionY, 0);
-slope.receiveShadow = true;
-scene.add(slope);
+    const slopeGeometry = new THREE.PlaneGeometry(slopeWidthX, slopeWidthZ);
+    const slopeMaterial = new THREE.MeshPhongMaterial({ color: 0x3a6a8a, shininess: 20, side: THREE.DoubleSide });
+    const slope = new THREE.Mesh(slopeGeometry, slopeMaterial);
+    const quatX = new THREE.Quaternion();
+    quatX.setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
+    const quatZ = new THREE.Quaternion();
+    quatZ.setFromAxisAngle(new THREE.Vector3(0, 0, 1), -theta);
+    slope.quaternion.multiplyQuaternions(quatZ, quatX);
+    const positionX = (slopeWidthX / 2) * cosTheta;
+    const positionY = -slopeHeight / 2 - r / cosTheta;
+    slope.position.set(positionX, positionY, 0);
+    slope.receiveShadow = true;
+    scene.add(slope);
 
-const slopeEdges = new THREE.EdgesGeometry(slopeGeometry);
-const slopeLine = new THREE.LineSegments(slopeEdges, new THREE.LineBasicMaterial({ color: 0x00ffaa }));
-slopeLine.quaternion.multiplyQuaternions(quatZ, quatX);
-slopeLine.position.set(positionX, positionY, 0);
-scene.add(slopeLine);
+    const slopeEdges = new THREE.EdgesGeometry(slopeGeometry);
+    const slopeLine = new THREE.LineSegments(slopeEdges, new THREE.LineBasicMaterial({ color: 0x00ffaa }));
+    slopeLine.quaternion.multiplyQuaternions(quatZ, quatX);
+    slopeLine.position.set(positionX, positionY, 0);
+    scene.add(slopeLine);
 
-const makeSphereRollTexture = (colorA, colorB, stripes = 8) => {
-  const size = 512;
-  const c = document.createElement('canvas');
-  c.width = size; c.height = size;
-  const ctx = c.getContext('2d');
-  const sw = size / stripes;
-  for (let i = 0; i < stripes; i++) {
-    ctx.fillStyle = i % 2 === 0 ? colorA : colorB;
-    ctx.fillRect(i * sw, 0, sw, size);
-  }
-  return new THREE.CanvasTexture(c);
-};
-const makeCylRollTexture = (colorA, colorB, stripes = 8) => {
-  const size = 512;
-  const c = document.createElement('canvas');
-  c.width = size; c.height = size;
-  const ctx = c.getContext('2d');
-  const sw = size / stripes;
-  for (let i = 0; i < stripes; i++) {
-    ctx.fillStyle = i % 2 === 0 ? colorA : colorB;
-    ctx.fillRect(i * sw, 0, sw, size);
-  }
-  return new THREE.CanvasTexture(c);
-};
-const lerpHex = (hexA, hexB, t) => {
-  const a = parseInt(hexA.replace('#',''), 16);
-  const b = parseInt(hexB.replace('#',''), 16);
-  const rr = Math.round(((a>>16)&0xff) + (((b>>16)&0xff) - ((a>>16)&0xff)) * t);
-  const gg = Math.round(((a>>8)&0xff)  + (((b>>8)&0xff)  - ((a>>8)&0xff))  * t);
-  const bb = Math.round(((a)&0xff)      + (((b)&0xff)      - ((a)&0xff))      * t);
-  return `#${rr.toString(16).padStart(2,'0')}${gg.toString(16).padStart(2,'0')}${bb.toString(16).padStart(2,'0')}`;
-};
-const hT = (hollowSpherThickness - 0.01) / (1 - 0.01) * 0.85;
-const hA = lerpHex('#ffccbb', '#ff5533', hT);
-const hB = lerpHex('#cc8877', '#880011', hT);
+    const makeSphereRollTexture = (colorA, colorB, stripes = 8) => {
+      const size = 512;
+      const c = document.createElement('canvas');
+      c.width = size; c.height = size;
+      const ctx = c.getContext('2d');
+      const sw = size / stripes;
+      for (let i = 0; i < stripes; i++) {
+        ctx.fillStyle = i % 2 === 0 ? colorA : colorB;
+        ctx.fillRect(i * sw, 0, sw, size);
+      }
+      return new THREE.CanvasTexture(c);
+    };
+    const makeCylRollTexture = (colorA, colorB, stripes = 8) => {
+      const size = 512;
+      const c = document.createElement('canvas');
+      c.width = size; c.height = size;
+      const ctx = c.getContext('2d');
+      const sw = size / stripes;
+      for (let i = 0; i < stripes; i++) {
+        ctx.fillStyle = i % 2 === 0 ? colorA : colorB;
+        ctx.fillRect(i * sw, 0, sw, size);
+      }
+      return new THREE.CanvasTexture(c);
+    };
+    const lerpHex = (hexA, hexB, t) => {
+      const a = parseInt(hexA.replace('#',''), 16);
+      const b = parseInt(hexB.replace('#',''), 16);
+      const rr = Math.round(((a>>16)&0xff) + (((b>>16)&0xff) - ((a>>16)&0xff)) * t);
+      const gg = Math.round(((a>>8)&0xff)  + (((b>>8)&0xff)  - ((a>>8)&0xff))  * t);
+      const bb = Math.round(((a)&0xff)      + (((b)&0xff)      - ((a)&0xff))      * t);
+      return `#${rr.toString(16).padStart(2,'0')}${gg.toString(16).padStart(2,'0')}${bb.toString(16).padStart(2,'0')}`;
+    };
+    const hT = (hollowSpherThickness - 0.01) / (1 - 0.01) * 0.85;
+    const hA = lerpHex('#ffccbb', '#ff5533', hT);
+    const hB = lerpHex('#cc8877', '#880011', hT);
 
-const solidSphereTex  = makeSphereRollTexture('#ff5533', '#880011');
-const hollowSphereTex = makeSphereRollTexture(hA, hB);
-const solidCylTex     = makeCylRollTexture('#2244dd', '#001177');
-const hollowCylTex    = makeCylRollTexture('#2244dd', '#001177');
+    const solidSphereTex  = makeSphereRollTexture('#ff5533', '#880011');
+    const hollowSphereTex = makeSphereRollTexture(hA, hB);
+    const solidCylTex     = makeCylRollTexture('#2244dd', '#001177');
+    const hollowCylTex    = makeCylRollTexture('#2244dd', '#001177');
 
-const sphere = new THREE.Mesh(
-  new THREE.SphereGeometry(r, 32, 32),
-  new THREE.MeshPhongMaterial({ map: solidSphereTex, shininess: 80 })
-);
-sphere.castShadow = true; scene.add(sphere); sphereRef.current = sphere;
+    const sphere = new THREE.Mesh(
+      new THREE.SphereGeometry(r, 32, 32),
+      new THREE.MeshPhongMaterial({ map: solidSphereTex, shininess: 80 })
+    );
+    sphere.castShadow = true; scene.add(sphere); sphereRef.current = sphere;
 
-const hollowSphereInnerR = (1 - hollowSpherThickness) * r;
-const hollowSphereGroup = new THREE.Group();
-hollowSphereGroup.add(new THREE.Mesh(
-  new THREE.SphereGeometry(r, 32, 32),
-  new THREE.MeshPhongMaterial({ map: hollowSphereTex, shininess: 80, side: THREE.FrontSide })
-));
-hollowSphereGroup.add(new THREE.Mesh(
-  new THREE.SphereGeometry(r, 32, 32),
-  new THREE.MeshPhongMaterial({ color: 0xcc3333, shininess: 40, side: THREE.BackSide })
-));
-hollowSphereGroup.add(new THREE.Mesh(
-  new THREE.SphereGeometry(hollowSphereInnerR, 32, 32),
-  new THREE.MeshPhongMaterial({ color: 0x0a0005, shininess: 0, side: THREE.BackSide })
-));
-hollowSphereGroup.castShadow = true;
-scene.add(hollowSphereGroup);
-hollowSphereRef.current = hollowSphereGroup;
-
-const solidCylGroup = new THREE.Group();
-solidCylGroup.add(new THREE.Mesh(
-  new THREE.CylinderGeometry(r, r, 2 * r, 32, 1, true),
-  new THREE.MeshPhongMaterial({ map: solidCylTex, shininess: 80, side: THREE.FrontSide })
-));
-const capMat = new THREE.MeshPhongMaterial({ color: 0x1133bb, shininess: 60 });
-const topCap = new THREE.Mesh(new THREE.CircleGeometry(r, 32), capMat);
-topCap.rotation.x = -Math.PI / 2; topCap.position.y = r;
-solidCylGroup.add(topCap);
-const bottomCap = new THREE.Mesh(new THREE.CircleGeometry(r, 32), capMat);
-bottomCap.rotation.x = Math.PI / 2; bottomCap.position.y = -r;
-solidCylGroup.add(bottomCap);
-solidCylGroup.castShadow = true;
-scene.add(solidCylGroup);
-cylinderRef.current = solidCylGroup;
-
-const innerR = (1 - hollowCylinderThickness) * r;
-const hollowCylGroup = new THREE.Group();
-hollowCylGroup.add(new THREE.Mesh(
-  new THREE.CylinderGeometry(r, r, 2 * r, 32, 1, true),
-  new THREE.MeshPhongMaterial({ map: hollowCylTex, shininess: 80, side: THREE.DoubleSide })
-));
-hollowCylGroup.add(new THREE.Mesh(
-  new THREE.CylinderGeometry(innerR, innerR, 2 * r + 0.01, 32, 1, true),
-  new THREE.MeshPhongMaterial({ transparent: true, opacity: 0, side: THREE.BackSide })
-));
-const topRing = new THREE.Mesh(
-  new THREE.RingGeometry(innerR, r, 32),
-  new THREE.MeshPhongMaterial({ color: 0x5577ee, shininess: 60, side: THREE.DoubleSide })
-);
-topRing.rotation.x = Math.PI / 2; topRing.position.y = r;
-hollowCylGroup.add(topRing);
-const bottomRing = new THREE.Mesh(
-  new THREE.RingGeometry(innerR, r, 32),
-  new THREE.MeshPhongMaterial({ color: 0x5577ee, shininess: 60, side: THREE.DoubleSide })
-);
-bottomRing.rotation.x = Math.PI / 2; bottomRing.position.y = -r;
-hollowCylGroup.add(bottomRing);
-hollowCylGroup.castShadow = true;
-scene.add(hollowCylGroup);
-hollowCylinderRef.current = hollowCylGroup;
-
-const trail = new THREE.Group(); scene.add(trail); trailRef.current = trail;
-const rankingLabels = new THREE.Group(); scene.add(rankingLabels); rankingLabelRef.current = rankingLabels;
-
-const axisOrigin = new THREE.Vector3(-5.5, 0, 0);
-const axisLen = 2.5;
-const makeAxisLabel = (text, color) => {
-  const c = document.createElement('canvas');
-  c.width = 256; c.height = 128;
-  const ctx = c.getContext('2d');
-  ctx.fillStyle = color;
-  ctx.font = 'bold 88px Arial';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(text, 128, 64);
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true }));
-  sprite.scale.set(2.4, 1.2, 1);
-  return sprite;
-};
-const arrowX = new THREE.ArrowHelper(new THREE.Vector3(1,0,0), axisOrigin, axisLen, 0xff3333, 0.4, 0.25);
-scene.add(arrowX);
-const labelX = makeAxisLabel('+X', '#ff8888');
-labelX.position.set(axisOrigin.x + axisLen + 0.9, axisOrigin.y, axisOrigin.z);
-scene.add(labelX);
-const arrowY = new THREE.ArrowHelper(new THREE.Vector3(0,1,0), axisOrigin, axisLen, 0x33ff55, 0.4, 0.25);
-scene.add(arrowY);
-const labelY = makeAxisLabel('+Y', '#88ffaa');
-labelY.position.set(axisOrigin.x, axisOrigin.y + axisLen + 0.6, axisOrigin.z);
-scene.add(labelY);
-const arrowZ = new THREE.ArrowHelper(new THREE.Vector3(0,0,1), axisOrigin, axisLen, 0x3388ff, 0.4, 0.25);
-scene.add(arrowZ);
-const labelZ = makeAxisLabel('+Z', '#88ccff');
-labelZ.position.set(axisOrigin.x, axisOrigin.y, axisOrigin.z + axisLen + 0.9);
-scene.add(labelZ);
-
-const handleResize = () => {
-  if (!mountRef.current) return;
-  const w = mountRef.current.clientWidth;
-  const h = mountRef.current.clientHeight;
-  camera.aspect = w / h;
-  camera.updateProjectionMatrix();
-  renderer.setSize(w, h);
-};
-window.addEventListener('resize', handleResize);
-const animate = () => { requestAnimationFrame(animate); renderer.render(scene, camera); };
-animate();
-return () => {
-  window.removeEventListener('resize', handleResize);
-  while (scene.children.length > 0) scene.remove(scene.children[0]);
-  renderer.dispose();
-  if (mountRef.current && renderer.domElement.parentNode === mountRef.current)
-    mountRef.current.removeChild(renderer.domElement);
-};
-```
-
-}, [slopeAngle, slopeHeight, hollowSpherThickness, hollowCylinderThickness]);
-
-useEffect(() => {
-if (!sphereRef.current) return;
-const trail = trailRef.current;
-const rankingLabels = rankingLabelRef.current;
-
-```
-const rankSolid     = getRankIfArrived('solid',     solidArrived);
-const rankHollow    = getRankIfArrived('hollow',    hollowArrived);
-const rankCylinder  = getRankIfArrived('cylinder',  cylinderArrived);
-const rankHollowCyl = getRankIfArrived('hollowCyl', hollowCylArrived);
-
-const updateObject = (mesh, I, zOffset, isCylinder = false) => {
-  const pos = getObjectPosition(time, I, zOffset);
-  mesh.position.copy(pos);
-  const k = calculateK(time, I);
-  if (isCylinder) {
-    const qX = new THREE.Quaternion(); qX.setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
-    const qZ = new THREE.Quaternion(); qZ.setFromAxisAngle(new THREE.Vector3(0, 0, 1), -k);
-    mesh.quaternion.multiplyQuaternions(qZ, qX);
-  } else {
-    mesh.rotation.z = -k;
-  }
-};
-
-const z_sphere         = -(3 * r + 1.5 * gap);
-const z_hollowSphere   = -(1 * r + 0.5 * gap);
-const z_cylinder       =  (1 * r + 0.5 * gap);
-const z_hollowCylinder =  (3 * r + 1.5 * gap);
-
-updateObject(sphereRef.current,        I_solid,          z_sphere,         false);
-updateObject(hollowSphereRef.current,  I_hollowSphere,   z_hollowSphere,   false);
-updateObject(cylinderRef.current,      I_cylinder,       z_cylinder,       true);
-updateObject(hollowCylinderRef.current,I_hollowCylinder, z_hollowCylinder, true);
-
-while (rankingLabels.children.length > 0) rankingLabels.remove(rankingLabels.children[0]);
-
-const displayRankingLabel = (mesh, rank) => {
-  if (rank == null) return;
-  const canvas = document.createElement('canvas');
-  canvas.width = 256; canvas.height = 256;
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = 'rgba(0,0,0,0.8)';
-  ctx.beginPath(); ctx.arc(128, 128, 120, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = '#ffff00'; ctx.lineWidth = 4;
-  ctx.beginPath(); ctx.arc(128, 128, 120, 0, Math.PI * 2); ctx.stroke();
-  ctx.fillStyle = '#ffff00'; ctx.font = 'bold 120px Arial';
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText(rank, 128, 128);
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas) }));
-  sprite.scale.set(1.5, 1.5, 1.5);
-  sprite.position.copy(mesh.position);
-  sprite.position.y += 2;
-  rankingLabels.add(sprite);
-};
-
-displayRankingLabel(sphereRef.current,        rankSolid);
-displayRankingLabel(hollowSphereRef.current,   rankHollow);
-displayRankingLabel(cylinderRef.current,       rankCylinder);
-displayRankingLabel(hollowCylinderRef.current, rankHollowCyl);
-
-while (trail.children.length > 0) trail.remove(trail.children[0]);
-
-const drawTrail = (I, zOffset, color) => {
-  if (time <= 0) return;
-  const pastPts = [];
-  for (let t = 0; t <= time; t += timeStep) pastPts.push(getPointPosition(t, I, zOffset));
-  if (pastPts.length > 1) {
-    trail.add(new THREE.Line(
-      new THREE.BufferGeometry().setFromPoints(pastPts),
-      new THREE.LineBasicMaterial({ color, linewidth: 3 })
+    const hollowSphereInnerR = (1 - hollowSpherThickness) * r;
+    const hollowSphereGroup = new THREE.Group();
+    hollowSphereGroup.add(new THREE.Mesh(
+      new THREE.SphereGeometry(r, 32, 32),
+      new THREE.MeshPhongMaterial({ map: hollowSphereTex, shininess: 80, side: THREE.FrontSide })
     ));
-  }
-};
+    hollowSphereGroup.add(new THREE.Mesh(
+      new THREE.SphereGeometry(r, 32, 32),
+      new THREE.MeshPhongMaterial({ color: 0xcc3333, shininess: 40, side: THREE.BackSide })
+    ));
+    hollowSphereGroup.add(new THREE.Mesh(
+      new THREE.SphereGeometry(hollowSphereInnerR, 32, 32),
+      new THREE.MeshPhongMaterial({ color: 0x0a0005, shininess: 0, side: THREE.BackSide })
+    ));
+    hollowSphereGroup.castShadow = true;
+    scene.add(hollowSphereGroup);
+    hollowSphereRef.current = hollowSphereGroup;
 
-drawTrail(I_solid,          z_sphere,         0xff6464);
-drawTrail(I_hollowSphere,   z_hollowSphere,   0xff8888);
-drawTrail(I_cylinder,       z_cylinder,       0x6464ff);
-drawTrail(I_hollowCylinder, z_hollowCylinder, 0x8888ff);
+    const solidCylGroup = new THREE.Group();
+    solidCylGroup.add(new THREE.Mesh(
+      new THREE.CylinderGeometry(r, r, 2 * r, 32, 1, true),
+      new THREE.MeshPhongMaterial({ map: solidCylTex, shininess: 80, side: THREE.FrontSide })
+    ));
+    const capMat = new THREE.MeshPhongMaterial({ color: 0x1133bb, shininess: 60 });
+    const topCap = new THREE.Mesh(new THREE.CircleGeometry(r, 32), capMat);
+    topCap.rotation.x = -Math.PI / 2; topCap.position.y = r;
+    solidCylGroup.add(topCap);
+    const bottomCap = new THREE.Mesh(new THREE.CircleGeometry(r, 32), capMat);
+    bottomCap.rotation.x = Math.PI / 2; bottomCap.position.y = -r;
+    solidCylGroup.add(bottomCap);
+    solidCylGroup.castShadow = true;
+    scene.add(solidCylGroup);
+    cylinderRef.current = solidCylGroup;
 
-let fastestObject = sphereRef.current;
-let fastestY = calculateY(time, I_solid);
-const checkFastest = (I, mesh) => {
-  const y = calculateY(time, I);
-  if (y > fastestY && !hasReachedHeight(time, I)) { fastestY = y; fastestObject = mesh; }
-};
-checkFastest(I_hollowSphere,   hollowSphereRef.current);
-checkFastest(I_cylinder,       cylinderRef.current);
-checkFastest(I_hollowCylinder, hollowCylinderRef.current);
+    const innerR = (1 - hollowCylinderThickness) * r;
+    const hollowCylGroup = new THREE.Group();
+    hollowCylGroup.add(new THREE.Mesh(
+      new THREE.CylinderGeometry(r, r, 2 * r, 32, 1, true),
+      new THREE.MeshPhongMaterial({ map: hollowCylTex, shininess: 80, side: THREE.DoubleSide })
+    ));
+    hollowCylGroup.add(new THREE.Mesh(
+      new THREE.CylinderGeometry(innerR, innerR, 2 * r + 0.01, 32, 1, true),
+      new THREE.MeshPhongMaterial({ transparent: true, opacity: 0, side: THREE.BackSide })
+    ));
+    const topRing = new THREE.Mesh(
+      new THREE.RingGeometry(innerR, r, 32),
+      new THREE.MeshPhongMaterial({ color: 0x5577ee, shininess: 60, side: THREE.DoubleSide })
+    );
+    topRing.rotation.x = Math.PI / 2; topRing.position.y = r;
+    hollowCylGroup.add(topRing);
+    const bottomRing = new THREE.Mesh(
+      new THREE.RingGeometry(innerR, r, 32),
+      new THREE.MeshPhongMaterial({ color: 0x5577ee, shininess: 60, side: THREE.DoubleSide })
+    );
+    bottomRing.rotation.x = Math.PI / 2; bottomRing.position.y = -r;
+    hollowCylGroup.add(bottomRing);
+    hollowCylGroup.castShadow = true;
+    scene.add(hollowCylGroup);
+    hollowCylinderRef.current = hollowCylGroup;
 
-if (cameraRef.current && fastestObject) {
-  cameraRef.current.position.copy(fastestObject.position).add(new THREE.Vector3(0, 8, 13));
-  cameraRef.current.lookAt(fastestObject.position.x, fastestObject.position.y - 5, fastestObject.position.z);
-}
-```
+    const trail = new THREE.Group(); scene.add(trail); trailRef.current = trail;
+    const rankingLabels = new THREE.Group(); scene.add(rankingLabels); rankingLabelRef.current = rankingLabels;
 
-}, [time, slopeAngle, slopeHeight, hollowSpherThickness, hollowCylinderThickness,
-solidArrived, hollowArrived, cylinderArrived, hollowCylArrived]);
+    const axisOrigin = new THREE.Vector3(-5.5, 0, 0);
+    const axisLen = 2.5;
+    const makeAxisLabel = (text, color) => {
+      const c = document.createElement('canvas');
+      c.width = 256; c.height = 128;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = color;
+      ctx.font = 'bold 88px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, 128, 64);
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true }));
+      sprite.scale.set(2.4, 1.2, 1);
+      return sprite;
+    };
+    const arrowX = new THREE.ArrowHelper(new THREE.Vector3(1,0,0), axisOrigin, axisLen, 0xff3333, 0.4, 0.25);
+    scene.add(arrowX);
+    const labelX = makeAxisLabel('+X', '#ff8888');
+    labelX.position.set(axisOrigin.x + axisLen + 0.9, axisOrigin.y, axisOrigin.z);
+    scene.add(labelX);
+    const arrowY = new THREE.ArrowHelper(new THREE.Vector3(0,1,0), axisOrigin, axisLen, 0x33ff55, 0.4, 0.25);
+    scene.add(arrowY);
+    const labelY = makeAxisLabel('+Y', '#88ffaa');
+    labelY.position.set(axisOrigin.x, axisOrigin.y + axisLen + 0.6, axisOrigin.z);
+    scene.add(labelY);
+    const arrowZ = new THREE.ArrowHelper(new THREE.Vector3(0,0,1), axisOrigin, axisLen, 0x3388ff, 0.4, 0.25);
+    scene.add(arrowZ);
+    const labelZ = makeAxisLabel('+Z', '#88ccff');
+    labelZ.position.set(axisOrigin.x, axisOrigin.y, axisOrigin.z + axisLen + 0.9);
+    scene.add(labelZ);
 
-useEffect(() => { setTime(0); }, [slopeAngle, slopeHeight]);
-useEffect(() => { setTime(0); }, [hollowSpherThickness, hollowCylinderThickness]);
+    const handleResize = () => {
+      if (!mountRef.current) return;
+      const w = mountRef.current.clientWidth;
+      const h = mountRef.current.clientHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    };
+    window.addEventListener('resize', handleResize);
+    const animate = () => { requestAnimationFrame(animate); renderer.render(scene, camera); };
+    animate();
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      while (scene.children.length > 0) scene.remove(scene.children[0]);
+      renderer.dispose();
+      if (mountRef.current && renderer.domElement.parentNode === mountRef.current)
+        mountRef.current.removeChild(renderer.domElement);
+    };
+  }, [slopeAngle, slopeHeight, hollowSpherThickness, hollowCylinderThickness]);
 
-const y_solid      = calculateY(time, I_solid);
-const k_solid      = calculateK(time, I_solid);
-const y_hollow     = calculateY(time, I_hollowSphere);
-const k_hollow     = calculateK(time, I_hollowSphere);
-const y_cylinder   = calculateY(time, I_cylinder);
-const k_cylinder   = calculateK(time, I_cylinder);
-const y_hollow_cyl = calculateY(time, I_hollowCylinder);
-const k_hollow_cyl = calculateK(time, I_hollowCylinder);
+  useEffect(() => {
+    if (!sphereRef.current) return;
+    const trail = trailRef.current;
+    const rankingLabels = rankingLabelRef.current;
 
-const rankList = [maxTime_solid, maxTime_hollowSphere, maxTime_cylinder, maxTime_hollowCylinder].sort((a,b)=>a-b);
+    const rankSolid     = getRankIfArrived('solid',     solidArrived);
+    const rankHollow    = getRankIfArrived('hollow',    hollowArrived);
+    const rankCylinder  = getRankIfArrived('cylinder',  cylinderArrived);
+    const rankHollowCyl = getRankIfArrived('hollowCyl', hollowCylArrived);
 
-return (
-<div style={{ width:‘100%’, height:‘100vh’, display:‘flex’, flexDirection:‘column’, backgroundColor:’#0f1419’, color:’#fff’, fontFamily:”‘JetBrains Mono’,‘Courier New’,monospace”, userSelect:‘none’ }}>
-<style>{`* { -webkit-tap-highlight-color: transparent; box-sizing: border-box; } .slider-angle         { accent-color: #ff6464; } .slider-height        { accent-color: #64c864; } .slider-hollow-sphere { accent-color: #ff8888; } .slider-hollow-cyl    { accent-color: #8888ff; } .slider-time          { accent-color: #00ff88; } input[type=range] { -webkit-appearance: none; appearance: none; height: 8px; border-radius: 4px; cursor: pointer; outline: none; border: none; background: rgba(255,255,255,0.12); } input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 26px; height: 26px; border-radius: 50%; cursor: pointer; border: 3px solid rgba(0,0,0,0.4); box-shadow: 0 0 8px currentColor; } input[type=range]::-webkit-slider-runnable-track { border-radius: 4px; height: 8px; } input[type=number] { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; color: #fff; font-family: 'JetBrains Mono', monospace; font-size: 13px; text-align: center; padding: 6px 4px; } input[type=number]:focus { outline: none; border-color: rgba(0,255,136,0.6); } .ctrl-label { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 5px; } .ctrl-row   { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; } .ctrl-val   { font-size: 18px; font-weight: bold; } .stat-card  { border-radius: 10px; padding: 12px; font-size: 12px; line-height: 1.7; } .fkey { color: #ffff88; } .fval { color: #aaddff; }`}</style>
+    const updateObject = (mesh, I, zOffset, isCylinder = false) => {
+      const pos = getObjectPosition(time, I, zOffset);
+      mesh.position.copy(pos);
+      const k = calculateK(time, I);
+      if (isCylinder) {
+        const qX = new THREE.Quaternion(); qX.setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
+        const qZ = new THREE.Quaternion(); qZ.setFromAxisAngle(new THREE.Vector3(0, 0, 1), -k);
+        mesh.quaternion.multiplyQuaternions(qZ, qX);
+      } else {
+        mesh.rotation.z = -k;
+      }
+    };
 
-```
-  <div ref={mountRef} style={{ flex: 1, width: '100%', position: 'relative', minHeight: 0 }} />
+    const z_sphere         = -(3 * r + 1.5 * gap);
+    const z_hollowSphere   = -(1 * r + 0.5 * gap);
+    const z_cylinder       =  (1 * r + 0.5 * gap);
+    const z_hollowCylinder =  (3 * r + 1.5 * gap);
 
-  <div style={{
-    background: 'linear-gradient(180deg, rgba(10,14,20,0.98) 0%, rgba(16,24,40,0.99) 100%)',
-    borderTop: '1px solid rgba(0,255,170,0.2)',
-    boxShadow: '0 -6px 30px rgba(0,0,0,0.5)',
-    maxHeight: '52vh',
-    overflowY: 'auto',
-    WebkitOverflowScrolling: 'touch',
-    padding: '14px 16px 20px',
-  }}>
+    updateObject(sphereRef.current,        I_solid,          z_sphere,         false);
+    updateObject(hollowSphereRef.current,  I_hollowSphere,   z_hollowSphere,   false);
+    updateObject(cylinderRef.current,      I_cylinder,       z_cylinder,       true);
+    updateObject(hollowCylinderRef.current,I_hollowCylinder, z_hollowCylinder, true);
 
-    <div style={{ marginBottom: '16px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-        <span className="ctrl-label" style={{ margin: 0 }}>運動時間 t</span>
-        <span style={{ fontSize: '18px', fontWeight: 'bold', color: '#00ff88' }}>
-          {time.toFixed(2)}s <span style={{ fontSize: '11px', color: '#555' }}>/ {sliderMax.toFixed(2)}s</span>
-        </span>
-      </div>
-      <input type="range" min="0" max={sliderMax} step={timeStep} value={time}
-        className="slider-time" onChange={e => setTime(parseFloat(e.target.value))}
-        style={{ width: '100%' }} />
-    </div>
+    while (rankingLabels.children.length > 0) rankingLabels.remove(rankingLabels.children[0]);
 
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '14px', marginBottom: '16px', paddingBottom: '16px', borderBottom: '1px solid rgba(0,255,136,0.12)' }}>
-      {[
-        { label: 'θ 斜面角度', cls: 'slider-angle', min: 1, max: 89, step: 1, val: slopeAngle, set: setSlopeAngle, unit: '°', color: '#ff6464', toFixed: 1 },
-        { label: '斜面高度 H', cls: 'slider-height', min: 1, max: 30, step: 0.5, val: slopeHeight, set: setSlopeHeight, unit: ' m', color: '#64c864', toFixed: 1 },
-        { label: '空心球壁厚 x', cls: 'slider-hollow-sphere', min: 0.01, max: 0.99, step: 0.01, val: hollowSpherThickness, set: setHollowSphereThickness, unit: '', color: '#ff8888', toFixed: 2 },
-        { label: '空心柱壁厚 x', cls: 'slider-hollow-cyl', min: 0.01, max: 0.99, step: 0.01, val: hollowCylinderThickness, set: setHollowCylinderThickness, unit: '', color: '#8888ff', toFixed: 2 },
-      ].map(({ label, cls, min, max, step, val, set, unit, color, toFixed }) => (
-        <div key={label}>
-          <div className="ctrl-label">{label}</div>
-          <div className="ctrl-row">
-            <input type="range" min={min} max={max} step={step} value={val}
-              className={cls} onChange={e => set(parseFloat(e.target.value))} style={{ flex: 1 }} />
-            <input type="number" min={min} max={max} step={step} value={val}
-              onChange={e => set(parseFloat(e.target.value) || min)} style={{ width: '52px' }} />
+    const displayRankingLabel = (mesh, rank) => {
+      if (rank == null) return;
+      const canvas = document.createElement('canvas');
+      canvas.width = 256; canvas.height = 256;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = 'rgba(0,0,0,0.8)';
+      ctx.beginPath(); ctx.arc(128, 128, 120, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#ffff00'; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(128, 128, 120, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = '#ffff00'; ctx.font = 'bold 120px Arial';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(rank, 128, 128);
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas) }));
+      sprite.scale.set(1.5, 1.5, 1.5);
+      sprite.position.copy(mesh.position);
+      sprite.position.y += 2;
+      rankingLabels.add(sprite);
+    };
+
+    displayRankingLabel(sphereRef.current,        rankSolid);
+    displayRankingLabel(hollowSphereRef.current,   rankHollow);
+    displayRankingLabel(cylinderRef.current,       rankCylinder);
+    displayRankingLabel(hollowCylinderRef.current, rankHollowCyl);
+
+    while (trail.children.length > 0) trail.remove(trail.children[0]);
+
+    const drawTrail = (I, zOffset, color) => {
+      if (time <= 0) return;
+      const pastPts = [];
+      for (let t = 0; t <= time; t += timeStep) pastPts.push(getPointPosition(t, I, zOffset));
+      if (pastPts.length > 1) {
+        trail.add(new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints(pastPts),
+          new THREE.LineBasicMaterial({ color, linewidth: 3 })
+        ));
+      }
+    };
+
+    drawTrail(I_solid,          z_sphere,         0xff6464);
+    drawTrail(I_hollowSphere,   z_hollowSphere,   0xff8888);
+    drawTrail(I_cylinder,       z_cylinder,       0x6464ff);
+    drawTrail(I_hollowCylinder, z_hollowCylinder, 0x8888ff);
+
+    let fastestObject = sphereRef.current;
+    let fastestY = calculateY(time, I_solid);
+    const checkFastest = (I, mesh) => {
+      const y = calculateY(time, I);
+      if (y > fastestY && !hasReachedHeight(time, I)) { fastestY = y; fastestObject = mesh; }
+    };
+    checkFastest(I_hollowSphere,   hollowSphereRef.current);
+    checkFastest(I_cylinder,       cylinderRef.current);
+    checkFastest(I_hollowCylinder, hollowCylinderRef.current);
+
+    if (cameraRef.current && fastestObject) {
+      cameraRef.current.position.copy(fastestObject.position).add(new THREE.Vector3(0, 8, 13));
+      cameraRef.current.lookAt(fastestObject.position.x, fastestObject.position.y - 5, fastestObject.position.z);
+    }
+  }, [time, slopeAngle, slopeHeight, hollowSpherThickness, hollowCylinderThickness,
+      solidArrived, hollowArrived, cylinderArrived, hollowCylArrived]);
+
+  useEffect(() => { setTime(0); }, [slopeAngle, slopeHeight]);
+  useEffect(() => { setTime(0); }, [hollowSpherThickness, hollowCylinderThickness]);
+
+  const y_solid      = calculateY(time, I_solid);
+  const k_solid      = calculateK(time, I_solid);
+  const y_hollow     = calculateY(time, I_hollowSphere);
+  const k_hollow     = calculateK(time, I_hollowSphere);
+  const y_cylinder   = calculateY(time, I_cylinder);
+  const k_cylinder   = calculateK(time, I_cylinder);
+  const y_hollow_cyl = calculateY(time, I_hollowCylinder);
+  const k_hollow_cyl = calculateK(time, I_hollowCylinder);
+
+  const rankList = [maxTime_solid, maxTime_hollowSphere, maxTime_cylinder, maxTime_hollowCylinder].sort((a,b)=>a-b);
+
+  return (
+    <div style={{ width:'100%', height:'100vh', display:'flex', flexDirection:'column', backgroundColor:'#0f1419', color:'#fff', fontFamily:"'JetBrains Mono','Courier New',monospace", userSelect:'none' }}>
+      <style>{`
+        * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+        .slider-angle         { accent-color: #ff6464; }
+        .slider-height        { accent-color: #64c864; }
+        .slider-hollow-sphere { accent-color: #ff8888; }
+        .slider-hollow-cyl    { accent-color: #8888ff; }
+        .slider-time          { accent-color: #00ff88; }
+        input[type=range] {
+          -webkit-appearance: none; appearance: none;
+          height: 8px; border-radius: 4px; cursor: pointer;
+          outline: none; border: none;
+          background: rgba(255,255,255,0.12);
+        }
+        input[type=range]::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          width: 26px; height: 26px; border-radius: 50%;
+          cursor: pointer; border: 3px solid rgba(0,0,0,0.4);
+          box-shadow: 0 0 8px currentColor;
+        }
+        input[type=range]::-webkit-slider-runnable-track { border-radius: 4px; height: 8px; }
+        input[type=number] {
+          background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.2);
+          border-radius: 6px; color: #fff; font-family: 'JetBrains Mono', monospace;
+          font-size: 13px; text-align: center; padding: 6px 4px;
+        }
+        input[type=number]:focus { outline: none; border-color: rgba(0,255,136,0.6); }
+        .ctrl-label { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 5px; }
+        .ctrl-row   { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+        .ctrl-val   { font-size: 18px; font-weight: bold; }
+        .stat-card  { border-radius: 10px; padding: 12px; font-size: 12px; line-height: 1.7; }
+        .fkey { color: #ffff88; }
+        .fval { color: #aaddff; }
+      `}</style>
+
+      <div ref={mountRef} style={{ flex: 1, width: '100%', position: 'relative', minHeight: 0 }} />
+
+      <div style={{
+        background: 'linear-gradient(180deg, rgba(10,14,20,0.98) 0%, rgba(16,24,40,0.99) 100%)',
+        borderTop: '1px solid rgba(0,255,170,0.2)',
+        boxShadow: '0 -6px 30px rgba(0,0,0,0.5)',
+        maxHeight: '52vh',
+        overflowY: 'auto',
+        WebkitOverflowScrolling: 'touch',
+        padding: '14px 16px 20px',
+      }}>
+
+        <div style={{ marginBottom: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+            <span className="ctrl-label" style={{ margin: 0 }}>運動時間 t</span>
+            <span style={{ fontSize: '18px', fontWeight: 'bold', color: '#00ff88' }}>
+              {time.toFixed(2)}s <span style={{ fontSize: '11px', color: '#555' }}>/ {sliderMax.toFixed(2)}s</span>
+            </span>
           </div>
-          <div className="ctrl-val" style={{ color }}>{val.toFixed(toFixed)}{unit}</div>
+          <input type="range" min="0" max={sliderMax} step={timeStep} value={time}
+            className="slider-time" onChange={e => setTime(parseFloat(e.target.value))}
+            style={{ width: '100%' }} />
         </div>
-      ))}
-    </div>
 
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginBottom: '16px' }}>
-      {[
-        { label: '實心球', sub: '', color: '#ff6464', bg: 'rgba(255,68,68,0.1)', border: 'rgba(255,68,68,0.3)', I: I_solid, y: y_solid, k: k_solid, arrived: solidArrived, maxT: maxTime_solid },
-        { label: '空心球', sub: ` x=${hollowSpherThickness.toFixed(2)}`, color: '#ff8888', bg: 'rgba(255,100,68,0.08)', border: 'rgba(255,100,100,0.3)', I: I_hollowSphere, y: y_hollow, k: k_hollow, arrived: hollowArrived, maxT: maxTime_hollowSphere },
-        { label: '實心圓柱', sub: '', color: '#6464ff', bg: 'rgba(68,68,255,0.1)', border: 'rgba(68,68,255,0.3)', I: I_cylinder, y: y_cylinder, k: k_cylinder, arrived: cylinderArrived, maxT: maxTime_cylinder },
-        { label: '空心圓柱', sub: ` x=${hollowCylinderThickness.toFixed(2)}`, color: '#8888ff', bg: 'rgba(68,68,255,0.08)', border: 'rgba(100,100,255,0.3)', I: I_hollowCylinder, y: y_hollow_cyl, k: k_hollow_cyl, arrived: hollowCylArrived, maxT: maxTime_hollowCylinder },
-      ].map(({ label, sub, color, bg, border, I, y, k, arrived, maxT }) => (
-        <div key={label} className="stat-card" style={{ background: bg, border: `1px solid ${border}` }}>
-          <div style={{ color, fontWeight: 'bold', marginBottom: '4px' }}>{label}{sub}</div>
-          <div style={{ color: '#ccc' }}>I = {I.toFixed(3)}</div>
-          <div style={{ color: '#ccc' }}>y = {y.toFixed(3)} m</div>
-          <div style={{ color: '#ccc' }}>k = {(k*180/Math.PI).toFixed(1)}°</div>
-          {arrived && <div style={{ color: '#ffff44', marginTop: '4px', fontSize: '11px' }}>✓ {maxT.toFixed(2)}s — 第{rankList.indexOf(maxT)+1}名</div>}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '14px', marginBottom: '16px', paddingBottom: '16px', borderBottom: '1px solid rgba(0,255,136,0.12)' }}>
+          {[
+            { label: 'θ 斜面角度', cls: 'slider-angle', min: 1, max: 89, step: 1, val: slopeAngle, set: setSlopeAngle, unit: '°', color: '#ff6464', toFixed: 1 },
+            { label: '斜面高度 H', cls: 'slider-height', min: 1, max: 30, step: 0.5, val: slopeHeight, set: setSlopeHeight, unit: ' m', color: '#64c864', toFixed: 1 },
+            { label: '空心球壁厚 x', cls: 'slider-hollow-sphere', min: 0.01, max: 0.99, step: 0.01, val: hollowSpherThickness, set: setHollowSphereThickness, unit: '', color: '#ff8888', toFixed: 2 },
+            { label: '空心柱壁厚 x', cls: 'slider-hollow-cyl', min: 0.01, max: 0.99, step: 0.01, val: hollowCylinderThickness, set: setHollowCylinderThickness, unit: '', color: '#8888ff', toFixed: 2 },
+          ].map(({ label, cls, min, max, step, val, set, unit, color, toFixed }) => (
+            <div key={label}>
+              <div className="ctrl-label">{label}</div>
+              <div className="ctrl-row">
+                <input type="range" min={min} max={max} step={step} value={val}
+                  className={cls} onChange={e => set(parseFloat(e.target.value))} style={{ flex: 1 }} />
+                <input type="number" min={min} max={max} step={step} value={val}
+                  onChange={e => set(parseFloat(e.target.value) || min)} style={{ width: '52px' }} />
+              </div>
+              <div className="ctrl-val" style={{ color }}>{val.toFixed(toFixed)}{unit}</div>
+            </div>
+          ))}
         </div>
-      ))}
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginBottom: '16px' }}>
+          {[
+            { label: '實心球', sub: '', color: '#ff6464', bg: 'rgba(255,68,68,0.1)', border: 'rgba(255,68,68,0.3)', I: I_solid, y: y_solid, k: k_solid, arrived: solidArrived, maxT: maxTime_solid },
+            { label: '空心球', sub: ` x=${hollowSpherThickness.toFixed(2)}`, color: '#ff8888', bg: 'rgba(255,100,68,0.08)', border: 'rgba(255,100,100,0.3)', I: I_hollowSphere, y: y_hollow, k: k_hollow, arrived: hollowArrived, maxT: maxTime_hollowSphere },
+            { label: '實心圓柱', sub: '', color: '#6464ff', bg: 'rgba(68,68,255,0.1)', border: 'rgba(68,68,255,0.3)', I: I_cylinder, y: y_cylinder, k: k_cylinder, arrived: cylinderArrived, maxT: maxTime_cylinder },
+            { label: '空心圓柱', sub: ` x=${hollowCylinderThickness.toFixed(2)}`, color: '#8888ff', bg: 'rgba(68,68,255,0.08)', border: 'rgba(100,100,255,0.3)', I: I_hollowCylinder, y: y_hollow_cyl, k: k_hollow_cyl, arrived: hollowCylArrived, maxT: maxTime_hollowCylinder },
+          ].map(({ label, sub, color, bg, border, I, y, k, arrived, maxT }) => (
+            <div key={label} className="stat-card" style={{ background: bg, border: `1px solid ${border}` }}>
+              <div style={{ color, fontWeight: 'bold', marginBottom: '4px' }}>{label}{sub}</div>
+              <div style={{ color: '#ccc' }}>I = {I.toFixed(3)}</div>
+              <div style={{ color: '#ccc' }}>y = {y.toFixed(3)} m</div>
+              <div style={{ color: '#ccc' }}>k = {(k*180/Math.PI).toFixed(1)}°</div>
+              {arrived && <div style={{ color: '#ffff44', marginTop: '4px', fontSize: '11px' }}>✓ {maxT.toFixed(2)}s — 第{rankList.indexOf(maxT)+1}名</div>}
+            </div>
+          ))}
+        </div>
+
+        <div style={{ background: 'rgba(0,255,136,0.04)', border: '1px solid rgba(0,255,136,0.12)', borderRadius: '10px', padding: '14px', fontSize: '11px', fontFamily: "'Courier New', monospace", lineHeight: '2.0', color: '#ccc' }}>
+          <div style={{ color: '#00ff88', fontWeight: 'bold', marginBottom: '10px', fontSize: '12px', letterSpacing: '1px' }}>基本公式</div>
+          <div style={{ color: '#ffff88', marginBottom: '8px' }}>r={r} m | m={m} kg | g={g} m/s² | θ={slopeAngle}°</div>
+          <div style={{ marginBottom: '10px' }}>
+            <span className="fkey">慣性矩：</span><br/>
+            I(實心球) = 2/5·mr² = <span className="fval">{I_solid.toFixed(4)}</span><br/>
+            I(空心球) = 2/5·mr²·(1−(1−x)⁵)/(1−(1−x)³) = <span className="fval">{I_hollowSphere.toFixed(4)}</span><br/>
+            I(實心柱) = 1/2·mr² = <span className="fval">{I_cylinder.toFixed(4)}</span><br/>
+            I(空心柱) = 1/2·mr²·(1−(1−x)⁴)/(1−(1−x)²) = <span className="fval">{I_hollowCylinder.toFixed(4)}</span>
+          </div>
+          <div style={{ marginBottom: '10px' }}>
+            <span className="fkey">滾動距離 y(t)：</span><br/>
+            y(t) = [mr²g / (mr²+I)] · sin²θ · t² / 2
+          </div>
+          <div style={{ marginBottom: '10px' }}>
+            <span className="fkey">旋轉角 k(t)：</span><br/>
+            k(t) = y(t) / (r · sinθ)
+          </div>
+          <div style={{ marginBottom: '10px' }}>
+            <span className="fkey">球/柱心位置：</span><br/>
+            x_c = y / tanθ<br/>
+            y_c = r − y<br/>
+            z_c = zOffset（各物體固定偏移）
+          </div>
+          <div style={{ borderTop: '1px solid rgba(0,255,136,0.15)', paddingTop: '10px' }}>
+            <span className="fkey">軌跡點座標（擺線 cycloid）：</span><br/>
+            x_p = y/tanθ − r·sin(k)<br/>
+            y_p = r·(1 − cos(k)) − y<br/>
+            z_p = zOffset<br/>
+            <span style={{ color: '#888', fontSize: '10px' }}>（接觸地面的點所描繪的擺線）</span>
+          </div>
+        </div>
+
+      </div>
     </div>
-
-    <div style={{ background: 'rgba(0,255,136,0.04)', border: '1px solid rgba(0,255,136,0.12)', borderRadius: '10px', padding: '14px', fontSize: '11px', fontFamily: "'Courier New', monospace", lineHeight: '2.0', color: '#ccc' }}>
-      <div style={{ color: '#00ff88', fontWeight: 'bold', marginBottom: '10px', fontSize: '12px', letterSpacing: '1px' }}>基本公式</div>
-      <div style={{ color: '#ffff88', marginBottom: '8px' }}>r={r} m | m={m} kg | g={g} m/s² | θ={slopeAngle}°</div>
-      <div style={{ marginBottom: '10px' }}>
-        <span className="fkey">慣性矩：</span><br/>
-        I(實心球) = 2/5·mr² = <span className="fval">{I_solid.toFixed(4)}</span><br/>
-        I(空心球) = 2/5·mr²·(1−(1−x)⁵)/(1−(1−x)³) = <span className="fval">{I_hollowSphere.toFixed(4)}</span><br/>
-        I(實心柱) = 1/2·mr² = <span className="fval">{I_cylinder.toFixed(4)}</span><br/>
-        I(空心柱) = 1/2·mr²·(1−(1−x)⁴)/(1−(1−x)²) = <span className="fval">{I_hollowCylinder.toFixed(4)}</span>
-      </div>
-      <div style={{ marginBottom: '10px' }}>
-        <span className="fkey">滾動距離 y(t)：</span><br/>
-        y(t) = [mr²g / (mr²+I)] · sin²θ · t² / 2
-      </div>
-      <div style={{ marginBottom: '10px' }}>
-        <span className="fkey">旋轉角 k(t)：</span><br/>
-        k(t) = y(t) / (r · sinθ)
-      </div>
-      <div style={{ marginBottom: '10px' }}>
-        <span className="fkey">球/柱心位置：</span><br/>
-        x_c = y / tanθ<br/>
-        y_c = r − y<br/>
-        z_c = zOffset（各物體固定偏移）
-      </div>
-      <div style={{ borderTop: '1px solid rgba(0,255,136,0.15)', paddingTop: '10px' }}>
-        <span className="fkey">軌跡點座標（擺線 cycloid）：</span><br/>
-        x_p = y/tanθ − r·sin(k)<br/>
-        y_p = r·(1 − cos(k)) − y<br/>
-        z_p = zOffset<br/>
-        <span style={{ color: '#888', fontSize: '10px' }}>（接觸地面的點所描繪的擺線）</span>
-      </div>
-    </div>
-
-  </div>
-</div>
-```
-
-);
+  );
 }
 
 if (!window.__rollingSimMounted) {
-window.__rollingSimMounted = true;
-const root = ReactDOM.createRoot(document.getElementById(‘root’));
-root.render(<MultiSphereSimulation />);
+  window.__rollingSimMounted = true;
+  const root = ReactDOM.createRoot(document.getElementById('root'));
+  root.render(<MultiSphereSimulation />);
 }
-</script>
-
+  </script>
 </body>
 </html>
