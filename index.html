@@ -456,8 +456,6 @@ function MultiSphereSimulation() {
                   style={{flex:1}} />
                 <input type="number" min={min} max={max} step={step} value={val}
                   onChange={e=>set(parseFloat(e.target.value)||min)} 
-                  onMouseUp={e=>e.target.blur()}
-                  onTouchEnd={e=>e.target.blur()}
                   style={{width:'52px'}} />
               </div>
               <div className="cv" style={{color}}>{val.toFixed(toFixed)}{unit}</div>
