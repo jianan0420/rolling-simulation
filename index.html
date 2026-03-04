@@ -28,6 +28,7 @@ function MultiSphereSimulation() {
   const hollowCylinderRef = useRef(null);
   const rankingLabelRef   = useRef(null);
   const trailRef          = useRef(null);
+  const scrollRef         = useRef(null);
 
   const [time, setTime] = useState(0);
   const timeRef = useRef(0);
@@ -43,8 +44,14 @@ function MultiSphereSimulation() {
   const sliderMaxRef = useRef(1);
   const speedRef     = useRef(1);
   const playingRef   = useRef(false);
-  const speedIdxRef  = useRef(7); // index of 1 in SPEEDS
+  const speedIdxRef  = useRef(7);
   const SPEEDS = [-4, -2, -1, -0.5, -0.25, 0.25, 0.5, 1, 2, 4];
+
+  // ── Collapsible section states ──
+  const [secPanel,   setSecPanel]   = useState(false);
+  const [secParams,  setSecParams]  = useState(false);
+  const [secData,    setSecData]    = useState(false);
+  const [secFormula, setSecFormula] = useState(false);
 
   const timeStep = 0.02;
   const gap = 1, r = 1, m = 1, g = 9.8;
@@ -100,7 +107,6 @@ function MultiSphereSimulation() {
 
   useEffect(()=>{ timeRef.current=time; },[time]);
 
-  // ── handleSetSpeed：切速度 + 邊界自動播放 ──
   const handleSetSpeed = (s) => {
     const idx = SPEEDS.indexOf(s);
     speedIdxRef.current = idx;
@@ -113,7 +119,6 @@ function MultiSphereSimulation() {
     }
   };
 
-  // ── RAF 播放 loop ──
   useEffect(()=>{
     if(rafRef.current) cancelAnimationFrame(rafRef.current);
     lastTsRef.current=null;
@@ -131,17 +136,12 @@ function MultiSphereSimulation() {
     return ()=>{if(rafRef.current) cancelAnimationFrame(rafRef.current);};
   },[playing]);
 
-  // ── 鍵盤控制 ──
   useEffect(()=>{
     const onKey=(e)=>{
-      // 避免在 input 欄位觸發
       if(e.target.tagName==='INPUT') return;
       if(e.key===' '||e.code==='Space'){
         e.preventDefault();
-        setPlaying(p=>{
-          playingRef.current=!p;
-          return !p;
-        });
+        setPlaying(p=>{playingRef.current=!p;return !p;});
       } else if(e.key==='ArrowRight'){
         e.preventDefault();
         const cur=speedIdxRef.current;
@@ -156,7 +156,6 @@ function MultiSphereSimulation() {
     return ()=>window.removeEventListener('keydown',onKey);
   },[]);
 
-  // ── Three.js 場景 ──
   useEffect(()=>{
     if(!mountRef.current) return;
     const W=mountRef.current.clientWidth,H=mountRef.current.clientHeight;
@@ -246,13 +245,17 @@ function MultiSphereSimulation() {
     const handleResize=()=>{
       if(!mountRef.current) return;
       const w=mountRef.current.clientWidth,h=mountRef.current.clientHeight;
+      if(w===0||h===0) return;
       camera.aspect=w/h; camera.updateProjectionMatrix(); renderer.setSize(w,h);
     };
     window.addEventListener('resize',handleResize);
+    const ro=new ResizeObserver(handleResize);
+    ro.observe(mountRef.current);
     const animate=()=>{requestAnimationFrame(animate);renderer.render(scene,camera);};
     animate();
     return ()=>{
       window.removeEventListener('resize',handleResize);
+      ro.disconnect();
       while(scene.children.length>0) scene.remove(scene.children[0]);
       renderer.dispose();
       if(mountRef.current&&renderer.domElement.parentNode===mountRef.current)
@@ -341,6 +344,47 @@ function MultiSphereSimulation() {
     borderRadius:'4px', padding:'1px 5px', letterSpacing:'0.5px', fontFamily:'monospace'
   };
 
+  // ── Collapsible Section Header component ──
+  const SectionHeader = ({ title, open, onToggle, accent='#00ff88', count }) => (
+    <div
+      onClick={onToggle}
+      style={{
+        display:'flex', alignItems:'center', justifyContent:'space-between',
+        padding:'7px 10px', marginBottom: open ? '10px' : '0',
+        borderRadius:'7px', cursor:'pointer',
+        background: open ? 'rgba(0,255,136,0.06)' : 'rgba(255,255,255,0.03)',
+        border:`1px solid ${open ? 'rgba(0,255,136,0.2)' : 'rgba(255,255,255,0.08)'}`,
+        transition:'all 0.2s ease',
+        userSelect:'none',
+      }}
+    >
+      <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:'3px',textAlign:'center'}}>
+        <span style={{
+          fontSize:'11px', fontWeight:'bold', letterSpacing:'1.2px',
+          textTransform:'uppercase', color: open ? '#e0e0e0' : '#666',
+          transition:'color 0.2s ease',
+        }}>
+          {title}
+        </span>
+        {count != null && (
+          <span style={{
+            fontSize:'10px', color: open ? accent : '#444',
+            fontWeight:'normal', letterSpacing:'0.5px',
+            lineHeight:'1.5', whiteSpace:'pre-wrap',
+            transition:'color 0.2s ease',
+          }}>{count}</span>
+        )}
+      </div>
+      <span style={{
+        fontSize:'14px',
+        color: open ? accent : '#555',
+        transform: open ? 'rotate(0deg)' : 'rotate(-90deg)',
+        transition:'transform 0.25s ease, color 0.2s ease',
+        lineHeight:1,
+      }}>▾</span>
+    </div>
+  );
+
   return (
     <div style={{width:'100%',height:'100vh',display:'flex',flexDirection:'column',backgroundColor:'#0f1419',color:'#fff',fontFamily:"'JetBrains Mono','Courier New',monospace",userSelect:'none',touchAction:'pan-y'}}>
       <style>{`
@@ -358,20 +402,25 @@ function MultiSphereSimulation() {
         .fk{color:#ffff88;}.fv{color:#aaddff;}
         .pb{display:flex;align-items:center;justify-content:center;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:bold;border:1px solid;touch-action:manipulation;-webkit-tap-highlight-color:transparent;background:none;}
         .pb:active{opacity:0.65;}
+        .collapsible-body {
+          overflow: hidden;
+          transition: max-height 0.3s cubic-bezier(0.4,0,0.2,1), opacity 0.25s ease;
+        }
+        .collapsible-body.open  { opacity:1; }
+        .collapsible-body.closed{ opacity:0; max-height:0 !important; }
       `}</style>
 
       <div ref={mountRef} style={{flex: 1,width:'100%',position:'relative',minHeight:0}} />
 
-      {/* 底部面板外層：固定不滾動 */}
+      {/* 底部面板 */}
       <div style={{
         background:'linear-gradient(180deg,rgba(10,14,20,0.98) 0%,rgba(16,24,40,0.99) 100%)',
         borderTop:'1px solid rgba(0,255,170,0.2)',
         boxShadow:'0 -6px 30px rgba(0,0,0,0.5)',
         flexShrink:0,
       }}>
-        {/* ── 固定區：時間拉條 + 播放控制，永遠可見 ── */}
+        {/* ── 固定區：時間拉條 + 播放控制 ── */}
         <div style={{padding:'14px 16px 8px'}}>
-          {/* 時間拉條 */}
           <div style={{marginBottom:'10px'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px'}}>
               <span className="cl" style={{margin:0}}>運動時間 t</span>
@@ -385,11 +434,8 @@ function MultiSphereSimulation() {
               onTouchEnd={e=>e.target.blur()}
               style={{width:'100%'}} />
           </div>
-  
-          {/* 播放控制列 */}
+
           <div style={{display:'grid',gridTemplateColumns:'1fr 1.4fr 1fr',gap:'8px',marginBottom:'4px',alignItems:'start'}}>
-  
-            {/* 負向加速 */}
             <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'4px'}}>
               <div style={{fontSize:'10px',color:'#888',textAlign:'center'}}>
                 <span style={kbdStyle}>←</span> 負向加速
@@ -400,8 +446,6 @@ function MultiSphereSimulation() {
                 &#x23EA;
               </button>
             </div>
-  
-            {/* 播放/暫停 */}
             <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'4px'}}>
               <div style={{fontSize:'10px',color:'#888',textAlign:'center'}}>
                 <span style={kbdStyle}>Space</span> 播放/暫停
@@ -415,8 +459,6 @@ function MultiSphereSimulation() {
                 {speedLabel}
               </div>
             </div>
-  
-            {/* 正向加速 */}
             <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'4px'}}>
               <div style={{fontSize:'10px',color:'#888',textAlign:'center'}}>
                 <span style={kbdStyle}>→</span> 正向加速
@@ -428,9 +470,8 @@ function MultiSphereSimulation() {
               </button>
             </div>
           </div>
-  
-          {/* 速度刻度列 */}
-          <div style={{display:'flex',justifyContent:'center',gap:'4px',marginBottom:'16px',flexWrap:'wrap'}}>
+
+          <div style={{display:'flex',justifyContent:'center',gap:'4px',marginBottom:'12px',flexWrap:'wrap'}}>
             {SPEEDS.map((s,i)=>(
               <div key={s} onClick={()=>handleSetSpeed(s)}
                 style={{
@@ -444,91 +485,185 @@ function MultiSphereSimulation() {
               </div>
             ))}
           </div>
+
+          {/* ── 外層大收合開關 ── */}
+          <div
+            onClick={()=>setSecPanel(p=>{if(p){setSecParams(false);setSecData(false);setSecFormula(false);}else{if(scrollRef.current) scrollRef.current.scrollTop=0;}return !p;})}
+            style={{
+              display:'flex', alignItems:'center', justifyContent:'space-between',
+              padding:'9px 14px', borderRadius:'9px', cursor:'pointer',
+              background: secPanel
+                ? 'linear-gradient(90deg,rgba(0,255,136,0.10) 0%,rgba(100,150,255,0.08) 100%)'
+                : 'rgba(255,255,255,0.04)',
+              border:`1px solid ${secPanel?'rgba(0,255,136,0.35)':'rgba(255,255,255,0.1)'}`,
+              transition:'all 0.25s ease',
+              userSelect:'none',
+            }}
+          >
+            <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:'3px',textAlign:'center'}}>
+              <span style={{
+                fontSize:'12px', fontWeight:'bold', letterSpacing:'1.2px',
+                textTransform:'uppercase',
+                color: secPanel?'#e0e0e0':'#777',
+                transition:'color 0.25s ease',
+              }}>詳細面板</span>
+              <span style={{
+                fontSize:'10px', color: secPanel?'rgba(0,255,136,0.7)':'#444',
+                transition:'color 0.25s ease',
+              }}>
+                參數 · 數據 · 公式
+              </span>
+            </div>
+            <span style={{
+              fontSize:'16px',
+              color: secPanel?'#00ff88':'#555',
+              transform: secPanel?'rotate(0deg)':'rotate(-90deg)',
+              transition:'transform 0.28s ease, color 0.25s ease',
+              lineHeight:1, flexShrink:0,
+            }}>▾</span>
+          </div>
         </div>
-        {/* ── 可滾動區：參數、數據、公式 ── */}
+
+        {/* ── 可滾動區（被外層收合包覆）── */}
         <div style={{
+          overflow:'hidden',
+          maxHeight: secPanel ? 'calc(50vh - 80px)' : '0',
+          transition:'max-height 0.35s cubic-bezier(0.4,0,0.2,1)',
+        }}>
+        <div ref={scrollRef} style={{
           maxHeight:'calc(50vh - 130px)',
           overflowY:'auto',
           overflowX:'hidden',
           WebkitOverflowScrolling:'touch',
-          padding:'8px 16px 20px',
+          padding:'4px 16px 20px',
         }}>
-          {/* 參數控制 */}
-          <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'14px',marginBottom:'16px',paddingBottom:'16px',borderBottom:'1px solid rgba(0,255,136,0.12)'}}>
-            {[
-              {label:'θ 斜面角度', cls:'sa',min:1,   max:89,  step:1,   val:slopeAngle,             set:setSlopeAngle,             unit:'°', color:'#ff6464',toFixed:1},
-              {label:'斜面高度 H', cls:'sh',min:1,   max:30,  step:0.5, val:slopeHeight,            set:setSlopeHeight,            unit:' m',color:'#64c864',toFixed:1},
-              {label:'空心球壁厚 x',cls:'ss',min:0.01,max:0.99,step:0.01,val:hollowSpherThickness,   set:setHollowSphereThickness,  unit:'',  color:'#ff8888',toFixed:2},
-              {label:'空心柱壁厚 x',cls:'sc',min:0.01,max:0.99,step:0.01,val:hollowCylinderThickness,set:setHollowCylinderThickness,unit:'',  color:'#8888ff',toFixed:2},
-            ].map(({label,cls,min,max,step,val,set,unit,color,toFixed})=>(
-              <div key={label}>
-                <div className="cl">{label}</div>
-                <div className="cr">
-                  <input type="range" min={min} max={max} step={step} value={val} className={cls}
-                    onChange={e=>set(parseFloat(e.target.value))} 
-                    onMouseUp={e=>e.target.blur()}
-                    onTouchEnd={e=>e.target.blur()}
-                    style={{flex:1}} />
-                  <input type="number" min={min} max={max} step={step} value={val}
-                    onChange={e=>set(parseFloat(e.target.value)||min)} 
-                    style={{width:'52px'}} />
+
+          {/* ── Section 1: 參數控制 ── */}
+          <div style={{marginBottom:'10px'}}>
+            <SectionHeader
+              title="參數控制"
+              open={secParams}
+              onToggle={()=>setSecParams(p=>!p)}
+              accent="#00ff88"
+              count={"θ 斜面角度 · 斜面高度 H\n空心球壁厚 · 空心柱壁厚"}
+            />
+            <div
+              className={`collapsible-body ${secParams?'open':'closed'}`}
+              style={{ maxHeight: secParams ? '400px' : '0' }}
+            >
+              <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'14px',paddingBottom:'4px'}}>
+                {[
+                  {label:'θ 斜面角度', cls:'sa',min:1,   max:89,  step:1,   val:slopeAngle,             set:setSlopeAngle,             unit:'°', color:'#ff6464',toFixed:1},
+                  {label:'斜面高度 H', cls:'sh',min:1,   max:30,  step:0.5, val:slopeHeight,            set:setSlopeHeight,            unit:' m',color:'#64c864',toFixed:1},
+                  {label:'空心球壁厚 x',cls:'ss',min:0.01,max:0.99,step:0.01,val:hollowSpherThickness,   set:setHollowSphereThickness,  unit:'',  color:'#ff8888',toFixed:2},
+                  {label:'空心柱壁厚 x',cls:'sc',min:0.01,max:0.99,step:0.01,val:hollowCylinderThickness,set:setHollowCylinderThickness,unit:'',  color:'#8888ff',toFixed:2},
+                ].map(({label,cls,min,max,step,val,set,unit,color,toFixed})=>(
+                  <div key={label}>
+                    <div className="cl">{label}</div>
+                    <div className="cr">
+                      <input type="range" min={min} max={max} step={step} value={val} className={cls}
+                        onChange={e=>set(parseFloat(e.target.value))}
+                        onMouseUp={e=>e.target.blur()}
+                        onTouchEnd={e=>e.target.blur()}
+                        style={{flex:1}} />
+                      <input type="number" min={min} max={max} step={step} value={val}
+                        onChange={e=>set(parseFloat(e.target.value)||min)}
+                        style={{width:'52px'}} />
+                    </div>
+                    <div className="cv" style={{color}}>{val.toFixed(toFixed)}{unit}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* divider */}
+          <div style={{height:'1px',background:'rgba(0,255,136,0.08)',marginBottom:'10px'}}/>
+
+          {/* ── Section 2: 物體數據 ── */}
+          <div style={{marginBottom:'10px'}}>
+            <SectionHeader
+              title="物體數據"
+              open={secData}
+              onToggle={()=>setSecData(p=>!p)}
+              accent="#88aaff"
+              count={`實心球 · 空心球 · 實心圓柱 · 空心圓柱\nt = ${time.toFixed(2)}s`}
+            />
+            <div
+              className={`collapsible-body ${secData?'open':'closed'}`}
+              style={{ maxHeight: secData ? '600px' : '0' }}
+            >
+              <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'10px',paddingBottom:'4px'}}>
+                {[
+                  {label:'實心球',   sub:'',                                       color:'#ff6464',bg:'rgba(255,68,68,0.1)',   border:'rgba(255,68,68,0.3)',  I:I_solid,         y:y_solid,      k:k_solid,      arrived:solidArrived,    maxT:maxTime_solid},
+                  {label:'空心球',   sub:` x=${hollowSpherThickness.toFixed(2)}`,   color:'#ff8888',bg:'rgba(255,100,68,0.08)',border:'rgba(255,100,100,0.3)',I:I_hollowSphere,  y:y_hollow,     k:k_hollow,     arrived:hollowArrived,   maxT:maxTime_hollowSphere},
+                  {label:'實心圓柱', sub:'',                                       color:'#6464ff',bg:'rgba(68,68,255,0.1)',   border:'rgba(68,68,255,0.3)',  I:I_cylinder,      y:y_cylinder,   k:k_cylinder,   arrived:cylinderArrived, maxT:maxTime_cylinder},
+                  {label:'空心圓柱', sub:` x=${hollowCylinderThickness.toFixed(2)}`,color:'#8888ff',bg:'rgba(68,68,255,0.08)', border:'rgba(100,100,255,0.3)',I:I_hollowCylinder,y:y_hollow_cyl, k:k_hollow_cyl, arrived:hollowCylArrived,maxT:maxTime_hollowCylinder},
+                ].map(({label,sub,color,bg,border,I,y,k,arrived,maxT})=>(
+                  <div key={label} className="card" style={{background:bg,border:`1px solid ${border}`}}>
+                    <div style={{color,fontWeight:'bold',marginBottom:'4px'}}>{label}{sub}</div>
+                    <div style={{color:'#ccc'}}>轉動慣量 = {I.toFixed(3)}</div>
+                    <div style={{color:'#ccc'}}>下降距離 = {y.toFixed(3)} m</div>
+                    <div style={{color:'#ccc'}}>旋轉角度 = {(k*180/Math.PI).toFixed(1)}°</div>
+                    {arrived&&<div style={{color:'#ffff44',marginTop:'4px',fontSize:'11px'}}>✓ {maxT.toFixed(2)}s — 第{rankList.indexOf(maxT)+1}名</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* divider */}
+          <div style={{height:'1px',background:'rgba(0,255,136,0.08)',marginBottom:'10px'}}/>
+
+          {/* ── Section 3: 公式 ── */}
+          <div style={{marginBottom:'4px'}}>
+            <SectionHeader
+              title="基本公式"
+              open={secFormula}
+              onToggle={()=>setSecFormula(p=>!p)}
+              count={"轉動慣量 · y(t) · k(t)\n球/柱心位置 · 擺線軌跡"}
+              accent="#ffcc44"
+            />
+            <div
+              className={`collapsible-body ${secFormula?'open':'closed'}`}
+              style={{ maxHeight: secFormula ? '800px' : '0' }}
+            >
+              <div style={{background:'rgba(0,255,136,0.04)',border:'1px solid rgba(0,255,136,0.12)',borderRadius:'10px',padding:'14px',fontSize:'11px',fontFamily:"'Courier New',monospace",lineHeight:'2.0',color:'#ccc'}}>
+                <div style={{color:'#ffff88',marginBottom:'8px'}}>r={r} m | m={m} kg | g={g} m/s² | θ={slopeAngle}°</div>
+                <div style={{marginBottom:'10px'}}>
+                  <span className="fk">轉動慣量：</span><br/>
+                  I(實心球) = 2/5·mr² = <span className="fv">{I_solid.toFixed(4)}</span><br/>
+                  I(空心球) = 2/5·mr²·(1−(1−x)⁵)/(1−(1−x)³) = <span className="fv">{I_hollowSphere.toFixed(4)}</span><br/>
+                  I(實心柱) = 1/2·mr² = <span className="fv">{I_cylinder.toFixed(4)}</span><br/>
+                  I(空心柱) = 1/2·mr²·(1−(1−x)⁴)/(1−(1−x)²) = <span className="fv">{I_hollowCylinder.toFixed(4)}</span>
                 </div>
-                <div className="cv" style={{color}}>{val.toFixed(toFixed)}{unit}</div>
+                <div style={{marginBottom:'10px'}}>
+                  <span className="fk">滾動的垂直長度 y(t)：</span><br/>
+                  y(t) = [mr²g / (mr²+I)] · sin²θ · t² / 2
+                </div>
+                <div style={{marginBottom:'10px'}}>
+                  <span className="fk">旋轉角弧度 k(t)：</span><br/>
+                  k(t) = y(t) / (r · sinθ)
+                </div>
+                <div style={{marginBottom:'10px'}}>
+                  <span className="fk">球/柱心位置：</span><br/>
+                  x_c = y(t) / tanθ<br/>
+                  y_c = r − y(t)<br/>
+                  z_c = zOffset（各物體固定偏移）
+                </div>
+                <div style={{borderTop:'1px solid rgba(0,255,136,0.15)',paddingTop:'10px'}}>
+                  <span className="fk">軌跡點座標（擺線 cycloid）：</span><br/>
+                  x_p = y(t)/tanθ − r·sin(k)<br/>
+                  y_p = r·(1 − cos(k)) − y(t)<br/>
+                  z_p = zOffset<br/>
+                  <span style={{color:'#888',fontSize:'10px'}}>（接觸地面的點所描繪的擺線）</span>
+                </div>
               </div>
-            ))}
-          </div>
-  
-          {/* 四個物體數據 */}
-          <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'10px',marginBottom:'16px'}}>
-            {[
-              {label:'實心球',   sub:'',                                       color:'#ff6464',bg:'rgba(255,68,68,0.1)',   border:'rgba(255,68,68,0.3)',  I:I_solid,         y:y_solid,      k:k_solid,      arrived:solidArrived,    maxT:maxTime_solid},
-              {label:'空心球',   sub:` x=${hollowSpherThickness.toFixed(2)}`,   color:'#ff8888',bg:'rgba(255,100,68,0.08)',border:'rgba(255,100,100,0.3)',I:I_hollowSphere,  y:y_hollow,     k:k_hollow,     arrived:hollowArrived,   maxT:maxTime_hollowSphere},
-              {label:'實心圓柱', sub:'',                                       color:'#6464ff',bg:'rgba(68,68,255,0.1)',   border:'rgba(68,68,255,0.3)',  I:I_cylinder,      y:y_cylinder,   k:k_cylinder,   arrived:cylinderArrived, maxT:maxTime_cylinder},
-              {label:'空心圓柱', sub:` x=${hollowCylinderThickness.toFixed(2)}`,color:'#8888ff',bg:'rgba(68,68,255,0.08)', border:'rgba(100,100,255,0.3)',I:I_hollowCylinder,y:y_hollow_cyl, k:k_hollow_cyl, arrived:hollowCylArrived,maxT:maxTime_hollowCylinder},
-            ].map(({label,sub,color,bg,border,I,y,k,arrived,maxT})=>(
-              <div key={label} className="card" style={{background:bg,border:`1px solid ${border}`}}>
-                <div style={{color,fontWeight:'bold',marginBottom:'4px'}}>{label}{sub}</div>
-                <div style={{color:'#ccc'}}>轉動慣量 = {I.toFixed(3)}</div>
-                <div style={{color:'#ccc'}}>下降距離 = {y.toFixed(3)} m</div>
-                <div style={{color:'#ccc'}}>旋轉角度 = {(k*180/Math.PI).toFixed(1)}°</div>
-                {arrived&&<div style={{color:'#ffff44',marginTop:'4px',fontSize:'11px'}}>✓ {maxT.toFixed(2)}s — 第{rankList.indexOf(maxT)+1}名</div>}
-              </div>
-            ))}
-          </div>
-          {/* 公式區 */}
-          <div style={{background:'rgba(0,255,136,0.04)',border:'1px solid rgba(0,255,136,0.12)',borderRadius:'10px',padding:'14px',fontSize:'11px',fontFamily:"'Courier New',monospace",lineHeight:'2.0',color:'#ccc'}}>
-            <div style={{color:'#00ff88',fontWeight:'bold',marginBottom:'10px',fontSize:'12px',letterSpacing:'1px'}}>基本公式</div>
-            <div style={{color:'#ffff88',marginBottom:'8px'}}>r={r} m | m={m} kg | g={g} m/s² | θ={slopeAngle}°</div>
-            <div style={{marginBottom:'10px'}}>
-              <span className="fk">轉動慣量：</span><br/>
-              I(實心球) = 2/5·mr² = <span className="fv">{I_solid.toFixed(4)}</span><br/>
-              I(空心球) = 2/5·mr²·(1−(1−x)⁵)/(1−(1−x)³) = <span className="fv">{I_hollowSphere.toFixed(4)}</span><br/>
-              I(實心柱) = 1/2·mr² = <span className="fv">{I_cylinder.toFixed(4)}</span><br/>
-              I(空心柱) = 1/2·mr²·(1−(1−x)⁴)/(1−(1−x)²) = <span className="fv">{I_hollowCylinder.toFixed(4)}</span>
-            </div>
-            <div style={{marginBottom:'10px'}}>
-              <span className="fk">滾動的垂直長度 y(t)：</span><br/>
-              y(t) = [mr²g / (mr²+I)] · sin²θ · t² / 2
-            </div>
-            <div style={{marginBottom:'10px'}}>
-              <span className="fk">旋轉角弧度 k(t)：</span><br/>
-              k(t) = y(t) / (r · sinθ)
-            </div>
-            <div style={{marginBottom:'10px'}}>
-              <span className="fk">球/柱心位置：</span><br/>
-              x_c = y(t) / tanθ<br/>
-              y_c = r − y(t)<br/>
-              z_c = zOffset（各物體固定偏移）
-            </div>
-            <div style={{borderTop:'1px solid rgba(0,255,136,0.15)',paddingTop:'10px'}}>
-              <span className="fk">軌跡點座標（擺線 cycloid）：</span><br/>
-              x_p = y(t)/tanθ − r·sin(k)<br/>
-              y_p = r·(1 − cos(k)) − y(t)<br/>
-              z_p = zOffset<br/>
-              <span style={{color:'#888',fontSize:'10px'}}>（接觸地面的點所描繪的擺線）</span>
             </div>
           </div>
+
         </div>
+        </div>{/* end outer collapsible wrapper */}
       </div>
     </div>
   );
