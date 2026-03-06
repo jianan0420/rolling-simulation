@@ -83,8 +83,8 @@ function MultiSphereSimulation() {
   const sliderMaxRef = useRef(1);
   const speedRef     = useRef(1);
   const playingRef   = useRef(false);
-  const speedIdxRef  = useRef(9);
-  const SPEEDS = [-30, -10, -4, -2, -1, -0.5, -0.25, 0.25, 0.5, 1, 2, 4, 10, 30];
+  const speedIdxRef  = useRef(7);
+  const SPEEDS = [-4, -2, -1, -0.5, -0.25, 0.25, 0.5, 1, 2, 4];
 
   const [secPanel,   setSecPanel]   = useState(false);
   const [secParams,  setSecParams]  = useState(false);
@@ -858,7 +858,7 @@ function MultiSphereSimulation() {
     setTime(0);
     setDisplaySpeed(1);
     speedRef.current=1;
-    speedIdxRef.current=9;
+    speedIdxRef.current=7;
     clearTrail();
   },[committedAngle,committedHeight,committedInitSpd]);
 
@@ -867,7 +867,7 @@ function MultiSphereSimulation() {
     setTime(0);
     setDisplaySpeed(1);
     speedRef.current=1;
-    speedIdxRef.current=9;
+    speedIdxRef.current=7;
     clearTrail();
   },[committedHollowSph,committedHollowCyl]);
 
@@ -929,7 +929,7 @@ function MultiSphereSimulation() {
     setTime(0);
     setDisplaySpeed(1);
     speedRef.current=1;
-    speedIdxRef.current=9;
+    speedIdxRef.current=7;
     if(rankingLabelRef.current){
       while(rankingLabelRef.current.children.length>0){
         rankingLabelRef.current.remove(rankingLabelRef.current.children[0]);
@@ -1060,7 +1060,7 @@ function MultiSphereSimulation() {
             setTime(0);
             setDisplaySpeed(1);
             speedRef.current=1;
-            speedIdxRef.current=9;
+            speedIdxRef.current=7;
             if(rankingLabelRef.current){
               while(rankingLabelRef.current.children.length>0){
                 rankingLabelRef.current.remove(rankingLabelRef.current.children[0]);
@@ -1108,7 +1108,7 @@ function MultiSphereSimulation() {
                   setTime(0);
                   setDisplaySpeed(1);
                   speedRef.current=1;
-                  speedIdxRef.current=9;
+                  speedIdxRef.current=7;
                   if(rankingLabelRef.current){
                     while(rankingLabelRef.current.children.length>0){
                       rankingLabelRef.current.remove(rankingLabelRef.current.children[0]);
