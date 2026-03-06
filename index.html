@@ -83,8 +83,8 @@ function MultiSphereSimulation() {
   const sliderMaxRef = useRef(1);
   const speedRef     = useRef(1);
   const playingRef   = useRef(false);
-  const speedIdxRef  = useRef(7);
-  const SPEEDS = [-4, -2, -1, -0.5, -0.25, 0.25, 0.5, 1, 2, 4];
+  const speedIdxRef  = useRef(9);
+  const SPEEDS = [-30, -10, -4, -2, -1, -0.5, -0.25, 0.25, 0.5, 1, 2, 4, 10, 30];
 
   const [secPanel,   setSecPanel]   = useState(false);
   const [secParams,  setSecParams]  = useState(false);
@@ -858,7 +858,7 @@ function MultiSphereSimulation() {
     setTime(0);
     setDisplaySpeed(1);
     speedRef.current=1;
-    speedIdxRef.current=7;
+    speedIdxRef.current=9;
     clearTrail();
   },[committedAngle,committedHeight,committedInitSpd]);
 
@@ -867,7 +867,7 @@ function MultiSphereSimulation() {
     setTime(0);
     setDisplaySpeed(1);
     speedRef.current=1;
-    speedIdxRef.current=7;
+    speedIdxRef.current=9;
     clearTrail();
   },[committedHollowSph,committedHollowCyl]);
 
@@ -929,7 +929,7 @@ function MultiSphereSimulation() {
     setTime(0);
     setDisplaySpeed(1);
     speedRef.current=1;
-    speedIdxRef.current=7;
+    speedIdxRef.current=9;
     if(rankingLabelRef.current){
       while(rankingLabelRef.current.children.length>0){
         rankingLabelRef.current.remove(rankingLabelRef.current.children[0]);
@@ -947,7 +947,7 @@ function MultiSphereSimulation() {
       unit:'°', color:'#ff6464', toFixed:0
     },
     draftIsUphill
-      ? {label:'初速 V', cls:'sh', min:0.1, max:50, step:0.1, val:draftInitSpd, set:(v)=>{setDraftInitSpd(v);setLiveInitSpeed(v);resetOnParamChange();}, unit:' m/s', color:'#ffaa44', toFixed:1}
+      ? {label:'初速 V', cls:'sh', min:0.1, max:30, step:0.1, val:draftInitSpd, set:(v)=>{setDraftInitSpd(v);setLiveInitSpeed(v);resetOnParamChange();}, unit:' m/s', color:'#ffaa44', toFixed:1}
       : {label:'斜面高度 H', cls:'sh', min:1, max:30, step:0.5, val:draftHeight, set:(v)=>{setDraftHeight(v);setLiveHeight(v);resetOnParamChange();}, unit:' m', color:'#64c864', toFixed:1},
     {label:'空心球壁厚 x', cls:'ss', min:0.01, max:0.99, step:0.01, val:draftHollowSph, set:(v)=>{setDraftHollowSph(v);setLiveHollowSph(v);resetOnParamChange();}, unit:'', color:'#ff8888', toFixed:2},
     {label:'空心柱壁厚 x', cls:'sc', min:0.01, max:0.99, step:0.01, val:draftHollowCyl, set:(v)=>{setDraftHollowCyl(v);setLiveHollowCyl(v);resetOnParamChange();}, unit:'', color:'#8888ff', toFixed:2},
@@ -1060,7 +1060,7 @@ function MultiSphereSimulation() {
             setTime(0);
             setDisplaySpeed(1);
             speedRef.current=1;
-            speedIdxRef.current=7;
+            speedIdxRef.current=9;
             if(rankingLabelRef.current){
               while(rankingLabelRef.current.children.length>0){
                 rankingLabelRef.current.remove(rankingLabelRef.current.children[0]);
@@ -1108,7 +1108,7 @@ function MultiSphereSimulation() {
                   setTime(0);
                   setDisplaySpeed(1);
                   speedRef.current=1;
-                  speedIdxRef.current=7;
+                  speedIdxRef.current=9;
                   if(rankingLabelRef.current){
                     while(rankingLabelRef.current.children.length>0){
                       rankingLabelRef.current.remove(rankingLabelRef.current.children[0]);
