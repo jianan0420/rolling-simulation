@@ -653,7 +653,7 @@ function MultiSphereSimulation() {
           cam.updateProjectionMatrix();
 
           // NDC 邊界修正：X 超出 → 拉遠 Z，Y 超出 → 調整 Y，最多迭代 6 次
-          const MARGIN = 0.35;
+          const MARGIN = 0.42;
           for(let iter = 0; iter < 6; iter++) {
             const ndcs  = positions.map(p => p.clone().project(cam));
             const maxNX = Math.max(...ndcs.map(v => v.x));
