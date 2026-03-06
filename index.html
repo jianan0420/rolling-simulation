@@ -43,6 +43,7 @@ function MultiSphereSimulation() {
   const rankingLabelRef   = useRef(null);
   const trailRef          = useRef(null);
   const markersRef        = useRef(null);
+  const htmlMarkersRef    = useRef(null); // HTML overlay 標籤容器
   const scrollRef         = useRef(null);
   const slopeMeshRef      = useRef(null);
   const sLineRef          = useRef(null);
@@ -652,7 +653,7 @@ function MultiSphereSimulation() {
           cam.updateProjectionMatrix();
 
           // NDC 邊界修正：X 超出 → 拉遠 Z，Y 超出 → 調整 Y，最多迭代 6 次
-          const MARGIN = 0.28;
+          const MARGIN = 0.35;
           for(let iter = 0; iter < 6; iter++) {
             const ndcs  = positions.map(p => p.clone().project(cam));
             const maxNX = Math.max(...ndcs.map(v => v.x));
@@ -681,126 +682,25 @@ function MultiSphereSimulation() {
           }
         }
 
-        // 標記：永遠顯示在物體左右側，固定螢幕大小，整合排名
-        const showMarkers = true;
-
+        // 標記：Three.js Sprite，scale 根據攝影機到每個物體的距離精確補償
         while(markersRef.current.children.length > 0) {
           markersRef.current.remove(markersRef.current.children[0]);
         }
 
-        if(showMarkers) {
-          const MARKER_NAMES = ['實心球','空心球','實心柱','空心柱'];
-          const MARKER_COLORS_BG     = ['#aa1a00','#bb3311','#0d1eaa','#1f2fbb'];
-          const MARKER_COLORS_BORDER = ['#ff6644','#ff9977','#5577ff','#7799ff'];
+        {
+          const MARKER_NAMES     = ['實心球','空心球','實心柱','空心柱'];
+          const MARKER_COLORS_BG = ['#aa1a00','#bb3311','#0d1eaa','#1f2fbb'];
+          const MARKER_COLORS_BD = ['#ff6644','#ff9977','#5577ff','#7799ff'];
 
-          // 基準：攝影機距離 BASE_DIST 時 scale = BASE_SCALE
-          // 每個物體各自計算距離，分開補償
-          const BASE_DIST  = 20;
-          const BASE_SCALE = 2.4;
-
-          const makeMarkerTex = (idx, rank) => {
-            const cv = document.createElement('canvas');
-            cv.width = 340; cv.height = 200;
-            const ctx = cv.getContext('2d');
-            const hasRank = rank != null;
-
-            // 氣泡形狀：依方向決定指針位置
-            const dir = MARKER_DIR[idx];
-            const isLeft  = dir === 'left';
-            const isRight = dir === 'right';
-            const isUp    = dir === 'up';
-            const isDown  = dir === 'down';
-
-            // 左右方向：340x200 canvas，指針在左/右側
-            // 上下方向：340x200 canvas（橫向），指針在下/上側中央
-            // isUp：氣泡在上方，指針朝下指向物體 → 指針在底部
-            //   bx=30, by=10, bw=280, bh=140, 指針 y=150~190(尖端190)
-            //   指針尖距canvas底(200) = 10, 距中心y=(10+140/2)=80, 距離=190-80=110 → TIP_Y=110/200=0.55
-            // isDown：氣泡在下方，指針朝上指向物體 → 指針在頂部
-            //   bx=30, by=50, bw=280, bh=140, 指針 y=10~50(尖端10)
-            //   指針尖距canvas頂(0) = 10, 中心y=(50+140/2)=120, 距離=120-10=110 → TIP_Y=110/200=0.55
-            const bx = (isUp || isDown) ? 30 : (isLeft ? 10 : 50);
-            const by = isDown ? 50 : 10;
-            const bw = 280;
-            const bh = (isUp || isDown) ? 140 : 180;
-            const br = 28;
-
-            // 背景圓角矩形
-            ctx.fillStyle = MARKER_COLORS_BG[idx];
-            ctx.beginPath();
-            ctx.moveTo(bx+br, by);
-            ctx.lineTo(bx+bw-br, by); ctx.quadraticCurveTo(bx+bw, by, bx+bw, by+br);
-            ctx.lineTo(bx+bw, by+bh-br); ctx.quadraticCurveTo(bx+bw, by+bh, bx+bw-br, by+bh);
-            ctx.lineTo(bx+br, by+bh); ctx.quadraticCurveTo(bx, by+bh, bx, by+bh-br);
-            ctx.lineTo(bx, by+br); ctx.quadraticCurveTo(bx, by, bx+br, by);
-            ctx.closePath(); ctx.fill();
-
-            // 三角指針（朝向物體方向）
-            ctx.fillStyle = MARKER_COLORS_BG[idx];
-            ctx.beginPath();
-            if(isLeft) {
-              ctx.moveTo(bx+bw, by+bh/2 - 22);
-              ctx.lineTo(bx+bw+40, by+bh/2);
-              ctx.lineTo(bx+bw, by+bh/2 + 22);
-            } else if(isRight) {
-              ctx.moveTo(bx, by+bh/2 - 22);
-              ctx.lineTo(bx-40, by+bh/2);
-              ctx.lineTo(bx, by+bh/2 + 22);
-            } else if(isUp) {
-              // 標記在上方，指針朝下指向物體，在氣泡底部中央
-              ctx.moveTo(bx+bw/2 - 22, by+bh);
-              ctx.lineTo(bx+bw/2,      190);
-              ctx.lineTo(bx+bw/2 + 22, by+bh);
-            } else {
-              // 標記在下方，指針朝上指向物體，在氣泡頂部中央
-              ctx.moveTo(bx+bw/2 - 22, by);
-              ctx.lineTo(bx+bw/2,      10);
-              ctx.lineTo(bx+bw/2 + 22, by);
-            }
-            ctx.closePath(); ctx.fill();
-
-            // 邊框
-            ctx.strokeStyle = MARKER_COLORS_BORDER[idx];
-            ctx.lineWidth = 5;
-            ctx.beginPath();
-            ctx.moveTo(bx+br, by);
-            ctx.lineTo(bx+bw-br, by); ctx.quadraticCurveTo(bx+bw, by, bx+bw, by+br);
-            ctx.lineTo(bx+bw, by+bh-br); ctx.quadraticCurveTo(bx+bw, by+bh, bx+bw-br, by+bh);
-            ctx.lineTo(bx+br, by+bh); ctx.quadraticCurveTo(bx, by+bh, bx, by+bh-br);
-            ctx.lineTo(bx, by+br); ctx.quadraticCurveTo(bx, by, bx+br, by);
-            ctx.closePath(); ctx.stroke();
-
-            // 名稱文字
-            ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 52px Arial';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            const cx = bx + bw/2;
-
-            if(hasRank) {
-              // 排名 badge（左上角小圓）
-              const rx = isLeft ? bx+44 : bx+bw-44;
-              const ry = by+44;
-              ctx.fillStyle = '#ffdd00';
-              ctx.beginPath(); ctx.arc(rx, ry, 38, 0, Math.PI*2); ctx.fill();
-              ctx.fillStyle = '#000';
-              ctx.font = 'bold 44px Arial';
-              ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-              ctx.fillText(rank, rx, ry);
-              // 名稱（中央）
-              ctx.fillStyle = '#ffffff';
-              ctx.font = 'bold 50px Arial';
-              ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-              ctx.fillText(MARKER_NAMES[idx], cx, by+bh/2+4);
-            } else {
-              ctx.fillStyle = '#ffffff';
-              ctx.font = 'bold 52px Arial';
-              ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-              ctx.fillText(MARKER_NAMES[idx], cx, by+bh/2);
-            }
-
-            return new THREE.CanvasTexture(cv);
-          };
+          const xHollowSphere = meshes[1].position.x;
+          const xCylinder     = meshes[2].position.x;
+          const hollowFaster  = xHollowSphere > xCylinder;
+          const MARKER_DIR = [
+            'up',
+            hollowFaster ? 'right' : 'left',
+            hollowFaster ? 'left'  : 'right',
+            'down',
+          ];
 
           const RANKS = [
             getRealTimeRank('solid',     solidStopped),
@@ -809,84 +709,145 @@ function MultiSphereSimulation() {
             getRealTimeRank('hollowCyl', hollowCylStopped),
           ];
 
-          // 決定各物體標籤方向：
-          // idx0=實心球, idx1=空心球, idx2=實心柱, idx3=空心柱
-          // 實心球→螢幕上方(-Z世界/NDC+Y)，空心柱→螢幕下方(+Z世界/NDC-Y)
-          // 空心球 vs 實心柱：比較目前位置 x，誰的 x 大誰跑得快
-          // 如果空心球比實心球快(x更大)：空心球→右側(+X)，實心柱→左側(-X)
-          // 否則：空心球→左側(-X)，實心柱→右側(+X)
-          const xSolidSphere  = meshes[0].position.x;
-          const xHollowSphere = meshes[1].position.x;
-          const xCylinder     = meshes[2].position.x;
-          const hollowFaster  = xHollowSphere > xCylinder;
+          const makeMarkerTex = (idx, rank, dir) => {
+            const cv = document.createElement('canvas');
+            cv.width = 340; cv.height = 200;
+            const ctx = cv.getContext('2d');
+            const isLeft  = dir === 'left';
+            const isRight = dir === 'right';
+            const isUp    = dir === 'up';
+            const isDown  = dir === 'down';
+            const bg  = MARKER_COLORS_BG[idx];
+            const bdr = MARKER_COLORS_BD[idx];
 
-          // direction: 'left'(-X), 'right'(+X), 'up'(+NDC Y), 'down'(-NDC Y)
-          const MARKER_DIR = [
-            'up',                          // 實心球 → 上
-            hollowFaster ? 'right' : 'left', // 空心球
-            hollowFaster ? 'left' : 'right', // 實心柱
-            'down',                        // 空心柱 → 下
-          ];
+            const bx = (isUp||isDown) ? 30 : (isLeft ? 10 : 50);
+            const by = isDown ? 50 : 10;
+            const bw = 280, bh = (isUp||isDown) ? 140 : 180, br2 = 28;
 
-          // 螢幕空間偏移：把物體投影到 NDC，依方向偏移後反投影
-          const SCREEN_SIDE = MARKER_DIR.map(d => d === 'left' ? -1 : d === 'right' ? 1 : 0);
+            // 圓角矩形
+            ctx.fillStyle = bg;
+            ctx.beginPath();
+            ctx.moveTo(bx+br2,by); ctx.lineTo(bx+bw-br2,by); ctx.quadraticCurveTo(bx+bw,by,bx+bw,by+br2);
+            ctx.lineTo(bx+bw,by+bh-br2); ctx.quadraticCurveTo(bx+bw,by+bh,bx+bw-br2,by+bh);
+            ctx.lineTo(bx+br2,by+bh); ctx.quadraticCurveTo(bx,by+bh,bx,by+bh-br2);
+            ctx.lineTo(bx,by+br2); ctx.quadraticCurveTo(bx,by,bx+br2,by);
+            ctx.closePath(); ctx.fill();
+
+            // 三角指針
+            ctx.fillStyle = bg;
+            ctx.beginPath();
+            if(isLeft)  { ctx.moveTo(bx+bw,by+bh/2-22); ctx.lineTo(bx+bw+40,by+bh/2); ctx.lineTo(bx+bw,by+bh/2+22); }
+            if(isRight) { ctx.moveTo(bx,by+bh/2-22);    ctx.lineTo(bx-40,by+bh/2);    ctx.lineTo(bx,by+bh/2+22); }
+            if(isUp)    { ctx.moveTo(bx+bw/2-22,by+bh); ctx.lineTo(bx+bw/2,190);      ctx.lineTo(bx+bw/2+22,by+bh); }
+            if(isDown)  { ctx.moveTo(bx+bw/2-22,by);    ctx.lineTo(bx+bw/2,10);       ctx.lineTo(bx+bw/2+22,by); }
+            ctx.closePath(); ctx.fill();
+
+            // 邊框
+            ctx.strokeStyle = bdr; ctx.lineWidth = 5;
+            ctx.beginPath();
+            ctx.moveTo(bx+br2,by); ctx.lineTo(bx+bw-br2,by); ctx.quadraticCurveTo(bx+bw,by,bx+bw,by+br2);
+            ctx.lineTo(bx+bw,by+bh-br2); ctx.quadraticCurveTo(bx+bw,by+bh,bx+bw-br2,by+bh);
+            ctx.lineTo(bx+br2,by+bh); ctx.quadraticCurveTo(bx,by+bh,bx,by+bh-br2);
+            ctx.lineTo(bx,by+br2); ctx.quadraticCurveTo(bx,by,bx+br2,by);
+            ctx.closePath(); ctx.stroke();
+
+            // 文字
+            const cx = bx+bw/2;
+            if(rank != null) {
+              const rx = (isLeft||isUp||isDown) ? bx+44 : bx+bw-44;
+              const ry = by+44;
+              ctx.fillStyle='#ffdd00'; ctx.beginPath(); ctx.arc(rx,ry,38,0,Math.PI*2); ctx.fill();
+              ctx.fillStyle='#000'; ctx.font='bold 44px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle';
+              ctx.fillText(rank,rx,ry);
+              ctx.fillStyle='#fff'; ctx.font='bold 50px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle';
+              ctx.fillText(MARKER_NAMES[idx],cx,by+bh/2+4);
+            } else {
+              ctx.fillStyle='#fff'; ctx.font='bold 52px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle';
+              ctx.fillText(MARKER_NAMES[idx],cx,by+bh/2);
+            }
+            return new THREE.CanvasTexture(cv);
+          };
+
+          // 攝影機朝向單位向量（view-plane 法向量）
+          const camDir = new THREE.Vector3();
+          cam.getWorldDirection(camDir);
+
+          // 預先計算：把一個固定 NDC 高度反投影回世界單位，得到固定螢幕大小的 spriteH
+          // 對每個物體用自己的 depth 做計算
+          const TARGET_NDC_H = 0.20; // 標籤佔 NDC 高度的 20%（即螢幕高度 10%）
 
           meshes.forEach((mesh, idx) => {
-            const currDist = cam.position.distanceTo(mesh.position);
-            prevCamDistRef.current[idx] = currDist;
-            const markerScale   = BASE_SCALE * (currDist / BASE_DIST);
-            const markerSpriteH = markerScale;
-            const markerSpriteW = markerScale * (340/200);
-
             const dir = MARKER_DIR[idx];
-            const TIP_RATIO = 0.471;
 
-            const pA = mesh.position.clone().project(cam);
-            // 計算 NDC 單位換算（X 和 Y 方向）
-            const pBx = mesh.position.clone().add(new THREE.Vector3(1,0,0)).project(cam);
-            const pBy = mesh.position.clone().add(new THREE.Vector3(0,1,0)).project(cam);
-            const ndcPerWorldX = Math.abs(pBx.x - pA.x) || 0.05;
-            const ndcPerWorldY = Math.abs(pBy.y - pA.y) || 0.05;
+            // ── scale：NDC 反投影法，100% 保證螢幕大小固定 ──
+            // 取物體的 NDC 座標，往上偏移 TARGET_NDC_H，反投影回世界座標，
+            // 兩點世界距離就是對應的 spriteH
+            const ndcMesh = mesh.position.clone().project(cam);
+            const ndcTop  = ndcMesh.clone(); ndcTop.y += TARGET_NDC_H;
+            // 反投影時保持相同的 NDC z（相同深度平面）
+            const worldMesh = ndcMesh.clone().unproject(cam);
+            const worldTop  = ndcTop.clone().unproject(cam);
+            // unproject 出來的是射線方向，需要在物體的深度平面上取點
+            // 用 view-plane depth 修正
+            const depth = mesh.position.clone().sub(cam.position).dot(camDir);
+            const dirM  = worldMesh.clone().sub(cam.position).normalize();
+            const dirT  = worldTop.clone().sub(cam.position).normalize();
+            const pM    = cam.position.clone().addScaledVector(dirM, depth / dirM.dot(camDir));
+            const pT    = cam.position.clone().addScaledVector(dirT, depth / dirT.dot(camDir));
+            const spriteH = pM.distanceTo(pT);
+            const spriteW = spriteH * (340 / 200);
 
-            const ndc = pA.clone();
-            if(dir === 'left' || dir === 'right') {
-              const TIP_RATIO_X = 0.471;
-              const tipOffsetW = markerSpriteW * TIP_RATIO_X;
-              const side = dir === 'left' ? -1 : 1;
-              ndc.x += side * (r + tipOffsetW) * ndcPerWorldX;
-            } else {
-              // up/down：沿世界 Z 軸偏移（實心球往+Z，空心柱往-Z）
-              // 攝影機從+Z看，世界+Z = 螢幕「上方」(前景)，-Z = 螢幕「下方」(背景)
-              // 但螢幕上的 NDC Y 對應世界 Y，世界 Z 對應螢幕 Z 深度（不直接是Y）
-              // 正確做法：把偏移後的世界座標直接投影到 NDC
-              const TIP_RATIO_Y = 0.55; // 指針尖距sprite中心 / spriteH = 110/200
-              const tipOffsetH = markerSpriteH * TIP_RATIO_Y;
-              const worldZSide = dir === 'up' ? -1 : 1; // up=-Z世界(螢幕上方), down=+Z世界(螢幕下方)
-              const offsetPos = mesh.position.clone().add(
-                new THREE.Vector3(0, 0, worldZSide * (r + tipOffsetH))
-              );
-              const ndcOffset = offsetPos.clone().project(cam);
-              ndc.x = ndcOffset.x;
-              ndc.y = ndcOffset.y;
+            // ── 指針尖端在 canvas 中的比例 ──
+            // left/right: 尖端距 sprite 中心 X = 0.471 * spriteW
+            // up/down:    尖端距 sprite 中心 Y = 0.45 * spriteH  (canvas Y=190或10，中心=100)
+            const tipW = spriteW * 0.471;
+            const tipH = spriteH * 0.45;
+
+            // ── 物體半徑在當前 depth 下的世界單位（view-plane 上） ──
+            // Sprite 是 billboard，XY 方向對應攝影機平面
+            // 直接用 r 即可（物體半徑是世界單位）
+
+            // ── NDC 偏移：計算 sprite 中心應在的 NDC 位置 ──
+            // 做法：把「指針尖端世界座標」投影到 NDC，再加上 sprite 中心到尖端的 NDC 偏移
+            // 更精確做法：直接在 view space 計算 sprite 中心位置，再轉 world
+            const pMesh = mesh.position.clone().project(cam); // 物體的 NDC
+
+            // 攝影機的 right / up 向量（view-plane 軸）
+            const camRight = new THREE.Vector3(1,0,0).applyQuaternion(cam.quaternion);
+            const camUp    = new THREE.Vector3(0,1,0).applyQuaternion(cam.quaternion);
+
+            // 指針尖端的世界座標 = 物體中心 + 半徑 * 方向 + 0（尖端貼物體表面）
+            // sprite 中心的世界座標 = 尖端位置 + (tipW 或 tipH) * 方向
+            let spriteCenterWorld;
+            if(dir === 'left') {
+              const tipWorld = mesh.position.clone().addScaledVector(camRight, -r);
+              spriteCenterWorld = tipWorld.clone().addScaledVector(camRight, -tipW);
+            } else if(dir === 'right') {
+              const tipWorld = mesh.position.clone().addScaledVector(camRight, r);
+              spriteCenterWorld = tipWorld.clone().addScaledVector(camRight, tipW);
+            } else if(dir === 'up') {
+              // up = 螢幕上方 = camUp 正方向，但世界Z軸在view space的up分量需考慮
+              // 攝影機是看 -Z 方向，世界-Z在螢幕上投影為「上方」
+              // 用 camUp 方向做偏移
+              const tipWorld = mesh.position.clone().addScaledVector(camUp, r);
+              spriteCenterWorld = tipWorld.clone().addScaledVector(camUp, tipH);
+            } else { // down
+              const tipWorld = mesh.position.clone().addScaledVector(camUp, -r);
+              spriteCenterWorld = tipWorld.clone().addScaledVector(camUp, -tipH);
             }
 
-            const camPos   = cam.position.clone();
-            const meshDist = camPos.distanceTo(mesh.position);
-            const worldDir = ndc.clone().unproject(cam).sub(camPos).normalize();
-            const finalPos = camPos.clone().add(worldDir.multiplyScalar(meshDist));
-
             const sp = new THREE.Sprite(new THREE.SpriteMaterial({
-              map: makeMarkerTex(idx, RANKS[idx]),
-              transparent: true,
-              depthTest: false
+              map: makeMarkerTex(idx, RANKS[idx], dir),
+              transparent: true, depthTest: false
             }));
-            sp.scale.set(markerSpriteW, markerSpriteH, 1);
-            sp.position.copy(finalPos);
+            sp.scale.set(spriteW, spriteH, 1);
+            sp.position.copy(spriteCenterWorld);
             sp.renderOrder = 998;
             markersRef.current.add(sp);
           });
         }
-        
+
+
       }
     }
   },[time,liveAngle,liveHeight,liveInitSpeed,liveHollowSph,liveHollowCyl,solidStopped,hollowStopped,cylinderStopped,hollowCylStopped,allStopped]);
