@@ -953,10 +953,11 @@ function MultiSphereSimulation() {
   const paramRows = [
     {
       label: draftIsUphill ? 'θ 斜面角度 (爬坡)' : 'θ 斜面角度 (下坡)',
-      cls:'sa', min:-89, max:89, step:1,
-      val:draftAngle,
-      set:(v)=>{ const vv=v===0?(draftAngle>0?-1:1):v; setDraftAngle(vv); setLiveAngle(vv); resetOnParamChange(); },
-      unit:'°', color:'#ff6464', toFixed:0
+      cls:'sa', min:1, max:89, step:1,
+      val: Math.abs(draftAngle),
+      set:(v)=>{ const vv = draftIsUphill ? -Math.abs(v) : Math.abs(v); setDraftAngle(vv); setLiveAngle(vv); resetOnParamChange(); },
+      unit:'°', color:'#ff6464', toFixed:0,
+      toggleDir: ()=>{ const vv = -draftAngle; setDraftAngle(vv); setLiveAngle(vv); resetOnParamChange(); }
     },
     draftIsUphill
       ? {label:'初速 V', cls:'sh', min:0.1, max:30, step:0.1, val:draftInitSpd, set:(v)=>{setDraftInitSpd(v);setLiveInitSpeed(v);resetOnParamChange();}, unit:' m/s', color:'#ffaa44', toFixed:1}
@@ -1151,9 +1152,17 @@ function MultiSphereSimulation() {
                 count={draftIsUphill?"θ 斜面角度 · 初速 V\n空心球壁厚 · 空心柱壁厚":"θ 斜面角度 · 斜面高度 H\n空心球壁厚 · 空心柱壁厚"} />
               <div className={`collapsible-body ${secParams?'open':'closed'}`} style={{maxHeight:secParams?'400px':'0'}}>
                 <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'14px',paddingBottom:'4px'}}>
-                  {paramRows.map(({label,cls,min,max,step,val,set,unit,color,toFixed})=>(
+                  {paramRows.map(({label,cls,min,max,step,val,set,unit,color,toFixed,toggleDir})=>(
                     <div key={label}>
-                      <div className="cl">{label}</div>
+                      <div className="cl" style={{display:'flex',alignItems:'center',gap:'6px'}}>
+                        <span>{label}</span>
+                        {toggleDir && (
+                          <button onPointerDown={pd(toggleDir)}
+                            style={{fontSize:'11px',padding:'3px 10px',borderRadius:'6px',border:'1px solid rgba(255,150,100,0.7)',background:'rgba(255,100,60,0.25)',color:'#ffaa77',cursor:'pointer',lineHeight:'1.6',flexShrink:0,fontWeight:'bold',letterSpacing:'0.5px',boxShadow:'0 0 6px rgba(255,100,60,0.2)'}}>
+                            {draftIsUphill ? '↓ 改下坡' : '↑ 改爬坡'}
+                          </button>
+                        )}
+                      </div>
                       <div className="cr">
                         <input type="range" min={min} max={max} step={step} value={val} className={cls}
                           onChange={e=>set(parseFloat(e.target.value))}
