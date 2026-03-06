@@ -42,8 +42,10 @@ function MultiSphereSimulation() {
   const hollowCylinderRef = useRef(null);
   const rankingLabelRef   = useRef(null);
   const trailRef          = useRef(null);
+  const markersRef        = useRef(null);
   const scrollRef         = useRef(null);
-  // 軌跡增量快取：只重建最後一小塊，舊 chunk 凍結不動
+  const slopeMeshRef      = useRef(null);
+  const sLineRef          = useRef(null);
   const mkCache = () => ({ allPts:[], lastT:-1, chunkStart:0, completedMeshes:[], currentMesh:null });
   const trailCacheRef = useRef(null);
   if (!trailCacheRef.current) {
@@ -53,11 +55,24 @@ function MultiSphereSimulation() {
   const [time, setTime] = useState(0);
   const timeRef = useRef(0);
 
-  const [slopeAngle, setSlopeAngle]                           = useState(30);
-  const [slopeHeight, setSlopeHeight]                         = useState(10);
-  const [initSpeed,   setInitSpeed]                           = useState(10);
-  const [hollowSpherThickness, setHollowSphereThickness]      = useState(0.5);
-  const [hollowCylinderThickness, setHollowCylinderThickness] = useState(0.5);
+  const [liveAngle,   setLiveAngle]   = useState(30);
+  const [liveHeight,  setLiveHeight]  = useState(10);
+  const [liveInitSpeed, setLiveInitSpeed] = useState(10);
+  const [liveHollowSph, setLiveHollowSph] = useState(0.5);
+  const [liveHollowCyl, setLiveHollowCyl] = useState(0.5);
+
+  const [committedAngle,   setCommittedAngle]   = useState(30);
+  const [committedHeight,  setCommittedHeight]  = useState(10);
+  const [committedInitSpd, setCommittedInitSpd] = useState(10);
+  const [committedHollowSph, setCommittedHollowSph] = useState(0.5);
+  const [committedHollowCyl, setCommittedHollowCyl] = useState(0.5);
+
+  const [draftAngle,     setDraftAngle]     = useState(30);
+  const [draftHeight,    setDraftHeight]    = useState(10);
+  const [draftInitSpd,   setDraftInitSpd]   = useState(10);
+  const [draftHollowSph, setDraftHollowSph] = useState(0.5);
+  const [draftHollowCyl, setDraftHollowCyl] = useState(0.5);
+  const [isAdjusting,    setIsAdjusting]    = useState(false);
 
   const [playing, setPlaying] = useState(false);
   const [speed,   setSpeed]   = useState(1);
@@ -74,15 +89,15 @@ function MultiSphereSimulation() {
   const [secData,    setSecData]    = useState(false);
   const [secFormula, setSecFormula] = useState(false);
 
-  const isUphill = slopeAngle < 0;
-  const theta = Math.abs(slopeAngle) * Math.PI / 180;
+  const isUphill = liveAngle < 0;
+  const theta = Math.abs(liveAngle) * Math.PI / 180;
 
   const timeStep = 0.02;
   const gap = 1, r = 1, m = 1, g = 9.8;
   const I_solid          = 0.4 * m * r * r;
-  const I_hollowSphere   = 0.4*((1-Math.pow(1-hollowSpherThickness,5))/(1-Math.pow(1-hollowSpherThickness,3)))*m*r*r;
+  const I_hollowSphere   = 0.4*((1-Math.pow(1-liveHollowSph,5))/(1-Math.pow(1-liveHollowSph,3)))*m*r*r;
   const I_cylinder       = 0.5 * m * r * r;
-  const I_hollowCylinder = 0.5*((1-Math.pow(1-hollowCylinderThickness,4))/(1-Math.pow(1-hollowCylinderThickness,2)))*m*r*r;
+  const I_hollowCylinder = 0.5*((1-Math.pow(1-liveHollowCyl,4))/(1-Math.pow(1-liveHollowCyl,2)))*m*r*r;
 
   const calcY_down = (t,I) => {
     const c=(m*r*r*g)/(m*r*r+I), s=Math.sin(theta);
@@ -90,29 +105,46 @@ function MultiSphereSimulation() {
   };
 
   const calcY_up = (t,I) => {
-    const raw = initSpeed*t*Math.sin(theta) - calcY_down(t,I);
+    const raw = liveInitSpeed*t*Math.sin(theta) - calcY_down(t,I);
     return Math.max(0, raw);
   };
 
   const calcStopTime = (I) => {
     const c=(m*r*r*g)/(m*r*r+I), s=Math.sin(theta);
-    return (initSpeed*s)/(c*s*s);
+    return (liveInitSpeed*s)/(c*s*s);
   };
 
   const calcK = (t,I) => isUphill ? calcY_up(t,I)/(Math.sin(theta)*r) : calcY_down(t,I)/(Math.sin(theta)*r);
 
   const calcMaxTime_down = (I) => {
     const c=(m*r*r*g)/(m*r*r+I),s=Math.sin(theta);
-    let t=Math.sqrt(Math.max((2*slopeHeight)/(c*s*s),0.01));
+    let t=Math.sqrt(Math.max((2*liveHeight)/(c*s*s),0.01));
     let low=t*0.99,high=t*1.05;
-    for(let i=0;i<20;i++){const mid=(low+high)/2;if(calcY_down(mid,I)<slopeHeight)low=mid;else high=mid;}
+    for(let i=0;i<20;i++){const mid=(low+high)/2;if(calcY_down(mid,I)<liveHeight)low=mid;else high=mid;}
     return high;
   };
 
-  const maxTime_solid          = isUphill ? calcStopTime(I_solid)          : calcMaxTime_down(I_solid);
-  const maxTime_hollowSphere   = isUphill ? calcStopTime(I_hollowSphere)   : calcMaxTime_down(I_hollowSphere);
-  const maxTime_cylinder       = isUphill ? calcStopTime(I_cylinder)       : calcMaxTime_down(I_cylinder);
-  const maxTime_hollowCylinder = isUphill ? calcStopTime(I_hollowCylinder) : calcMaxTime_down(I_hollowCylinder);
+  const committedIsUphill = committedAngle < 0;
+  const committedTheta    = Math.abs(committedAngle) * Math.PI / 180;
+  const I_solid_c          = 0.4 * m * r * r;
+  const I_hollowSphere_c   = 0.4*((1-Math.pow(1-committedHollowSph,5))/(1-Math.pow(1-committedHollowSph,3)))*m*r*r;
+  const I_cylinder_c       = 0.5 * m * r * r;
+  const I_hollowCylinder_c = 0.5*((1-Math.pow(1-committedHollowCyl,4))/(1-Math.pow(1-committedHollowCyl,2)))*m*r*r;
+  const calcY_down_c = (t,I) => { const c=(m*r*r*g)/(m*r*r+I),s=Math.sin(committedTheta); return c*s*s*t*t/2; };
+  const calcY_up_c   = (t,I) => Math.max(0, committedInitSpd*t*Math.sin(committedTheta) - calcY_down_c(t,I));
+  const calcStopTime_c = (I) => { const c=(m*r*r*g)/(m*r*r+I),s=Math.sin(committedTheta); return (committedInitSpd*s)/(c*s*s); };
+  const calcMaxTime_down_c = (I) => {
+    const c=(m*r*r*g)/(m*r*r+I),s=Math.sin(committedTheta);
+    let t=Math.sqrt(Math.max((2*committedHeight)/(c*s*s),0.01));
+    let low=t*0.99,high=t*1.05;
+    for(let i=0;i<20;i++){const mid=(low+high)/2;if(calcY_down_c(mid,I)<committedHeight)low=mid;else high=mid;}
+    return high;
+  };
+
+  const maxTime_solid          = committedIsUphill ? calcStopTime_c(I_solid_c)          : calcMaxTime_down_c(I_solid_c);
+  const maxTime_hollowSphere   = committedIsUphill ? calcStopTime_c(I_hollowSphere_c)   : calcMaxTime_down_c(I_hollowSphere_c);
+  const maxTime_cylinder       = committedIsUphill ? calcStopTime_c(I_cylinder_c)       : calcMaxTime_down_c(I_cylinder_c);
+  const maxTime_hollowCylinder = committedIsUphill ? calcStopTime_c(I_hollowCylinder_c) : calcMaxTime_down_c(I_hollowCylinder_c);
   const maxTime   = Math.max(maxTime_solid,maxTime_hollowSphere,maxTime_cylinder,maxTime_hollowCylinder);
   const sliderMax = Math.ceil(maxTime/timeStep)*timeStep;
 
@@ -127,29 +159,17 @@ function MultiSphereSimulation() {
       const s=Y/sinT;
       return new THREE.Vector3(s*cosT - r*sinT, s*sinT + r*cosT, z);
     } else {
-      const y=Math.min(calcY_down(t,I),slopeHeight);
+      const y=Math.min(calcY_down(t,I),liveHeight);
       const s=y/sinT;
       return new THREE.Vector3(s*cosT + r*sinT, -s*sinT + r*cosT, z);
     }
   };
 
   const getPointPosition = (t,I,z) => {
-    // 接觸點 = 球心 + r × rotate(初始接觸方向, k)
-    // 確保接觸點到球心距離恆為 r，軌跡末端精確貼合球面
     const cosT=Math.cos(theta), sinT=Math.sin(theta);
     const k=calcK(t,I);
     const sinK=Math.sin(k), cosK=Math.cos(k);
     if(isUphill){
-      // 爬坡公式從下坡反推（斜面法向量取 x 反號）
-      // 球心 = (s·cosT − r·sinT,  s·sinT + r·cosT)
-      // 斜面法向量（指向球）= (−sinT, cosT)
-      // 初始接觸方向（球心→接觸點）= (sinT, −cosT)
-      // 球向右上滾動 → ω = -ds/dt < 0 → 順時針（與下坡相同）
-      // 順時針旋轉矩陣作用於 (sinT, −cosT)：
-      //   vx = sinT·cosK − cosT·sinK
-      //   vy = −sinT·sinK − cosT·cosK
-      // x_p = s·cosT − r·sinT·(1−cosK) − r·cosT·sinK
-      // y_p = s·sinT + r·cosT·(1−cosK) − r·sinT·sinK
       const Y=calcY_up(t,I);
       const s=Y/sinT;
       return new THREE.Vector3(
@@ -158,13 +178,7 @@ function MultiSphereSimulation() {
         z
       );
     } else {
-      // 球心 = (y/tanT + r·sinT,  −y + r·cosT)
-      // 斜面法向量（指向球）= (sinT, cosT)
-      // 初始接觸方向（球心→接觸點）= (−sinT, −cosT)
-      // 下坡時順時針轉 k：rotate(−k) 作用於 (−sinT, −cosT)
-      // x_p = y/tanT + r·sinT(1−cosK) − r·cosT·sinK
-      // y_p = −y + r·cosT(1−cosK) + r·sinT·sinK
-      const y=Math.min(calcY_down(t,I),slopeHeight);
+      const y=Math.min(calcY_down(t,I),liveHeight);
       return new THREE.Vector3(
         y/Math.tan(theta) + r*sinT*(1-cosK) - r*cosT*sinK,
         -y + r*cosT*(1-cosK) + r*sinT*sinK,
@@ -173,31 +187,44 @@ function MultiSphereSimulation() {
     }
   };
 
-  const staticRankTableRef = useRef({});
-  useEffect(()=>{
-    let arr;
-    if(isUphill){
-      const peakY=(I)=>calcY_up(calcStopTime(I),I);
-      arr=[{n:'solid',v:peakY(I_solid)},{n:'hollow',v:peakY(I_hollowSphere)},{n:'cylinder',v:peakY(I_cylinder)},{n:'hollowCyl',v:peakY(I_hollowCylinder)}]
-          .sort((a,b)=>b.v-a.v);
-    } else {
-      arr=[{n:'solid',v:maxTime_solid},{n:'hollow',v:maxTime_hollowSphere},{n:'cylinder',v:maxTime_cylinder},{n:'hollowCyl',v:maxTime_hollowCylinder}]
-          .sort((a,b)=>a.v-b.v);
-    }
-    const tb={}; arr.forEach((o,i)=>{tb[o.n]=i+1;}); staticRankTableRef.current=tb;
-  },[isUphill,maxTime_solid,maxTime_hollowSphere,maxTime_cylinder,maxTime_hollowCylinder,initSpeed,theta]);
-
   const [solidStopped,     setSolidStopped]     = useState(false);
   const [hollowStopped,    setHollowStopped]    = useState(false);
   const [cylinderStopped,  setCylinderStopped]  = useState(false);
   const [hollowCylStopped, setHollowCylStopped] = useState(false);
   const tol = 0.01;
-  useEffect(()=>{ setSolidStopped(isUphill ? time>=maxTime_solid-tol   : calcY_down(time,I_solid)>=slopeHeight-slopeHeight*0.005); },[time,maxTime_solid,isUphill]);
-  useEffect(()=>{ setHollowStopped(isUphill ? time>=maxTime_hollowSphere-tol : calcY_down(time,I_hollowSphere)>=slopeHeight-slopeHeight*0.005); },[time,maxTime_hollowSphere,isUphill]);
-  useEffect(()=>{ setCylinderStopped(isUphill ? time>=maxTime_cylinder-tol : calcY_down(time,I_cylinder)>=slopeHeight-slopeHeight*0.005); },[time,maxTime_cylinder,isUphill]);
-  useEffect(()=>{ setHollowCylStopped(isUphill ? time>=maxTime_hollowCylinder-tol : calcY_down(time,I_hollowCylinder)>=slopeHeight-slopeHeight*0.005); },[time,maxTime_hollowCylinder,isUphill]);
+  useEffect(()=>{ setSolidStopped(isUphill ? time>=maxTime_solid-tol   : calcY_down(time,I_solid)>=liveHeight-liveHeight*0.005); },[time,maxTime_solid,isUphill]);
+  useEffect(()=>{ setHollowStopped(isUphill ? time>=maxTime_hollowSphere-tol : calcY_down(time,I_hollowSphere)>=liveHeight-liveHeight*0.005); },[time,maxTime_hollowSphere,isUphill]);
+  useEffect(()=>{ setCylinderStopped(isUphill ? time>=maxTime_cylinder-tol : calcY_down(time,I_cylinder)>=liveHeight-liveHeight*0.005); },[time,maxTime_cylinder,isUphill]);
+  useEffect(()=>{ setHollowCylStopped(isUphill ? time>=maxTime_hollowCylinder-tol : calcY_down(time,I_hollowCylinder)>=liveHeight-liveHeight*0.005); },[time,maxTime_hollowCylinder,isUphill]);
 
-  const getRank=(n,stopped)=>stopped?staticRankTableRef.current[n]??null:null;
+  const getRealTimeRank = (objName, stopped) => {
+    if (!stopped) return null;
+    const stoppedObjs = [];
+    if(solidStopped) {
+      const val = isUphill ? calcStopTime(I_solid) : maxTime_solid;
+      stoppedObjs.push({name:'solid', val: val});
+    }
+    if(hollowStopped) {
+      const val = isUphill ? calcStopTime(I_hollowSphere) : maxTime_hollowSphere;
+      stoppedObjs.push({name:'hollow', val: val});
+    }
+    if(cylinderStopped) {
+      const val = isUphill ? calcStopTime(I_cylinder) : maxTime_cylinder;
+      stoppedObjs.push({name:'cylinder', val: val});
+    }
+    if(hollowCylStopped) {
+      const val = isUphill ? calcStopTime(I_hollowCylinder) : maxTime_hollowCylinder;
+      stoppedObjs.push({name:'hollowCyl', val: val});
+    }
+    if(isUphill){
+      stoppedObjs.sort((a,b)=>b.val-a.val);
+    } else {
+      stoppedObjs.sort((a,b)=>a.val-b.val);
+    }
+    const idx = stoppedObjs.findIndex(o=>o.name===objName);
+    return idx !== -1 ? idx + 1 : null;
+  };
+
   const allStopped = solidStopped&&hollowStopped&&cylinderStopped&&hollowCylStopped;
 
   useEffect(()=>{ timeRef.current=time; },[time]);
@@ -254,7 +281,7 @@ function MultiSphereSimulation() {
     const W=mountRef.current.clientWidth,H=mountRef.current.clientHeight;
     const scene=new THREE.Scene(); scene.background=new THREE.Color(0x0f1419);
     const camera=new THREE.PerspectiveCamera(60,W/H,0.1,1000);
-    camera.position.set(8,8,13); camera.lookAt(8,-5,0); cameraRef.current=camera;
+    camera.position.set(8,8,10); camera.lookAt(8,-5,0); cameraRef.current=camera;
     const renderer=new THREE.WebGLRenderer({antialias:true});
     renderer.setSize(W,H); renderer.setPixelRatio(window.devicePixelRatio); renderer.shadowMap.enabled=true;
     mountRef.current.appendChild(renderer.domElement); rendererRef.current=renderer;
@@ -263,19 +290,52 @@ function MultiSphereSimulation() {
     const dL=new THREE.DirectionalLight(0xffffff,0.8); dL.position.set(10,10,5); dL.castShadow=true;
     dL.shadow.mapSize.width=dL.shadow.mapSize.height=2048; scene.add(dL);
 
-    const sinT=Math.sin(theta), cosT=Math.cos(theta);
-    const sWX = isUphill ? 80 : slopeHeight/sinT;
-    const sWZ=2*(4*r+2*gap);
-    const sGeo=new THREE.PlaneGeometry(sWX,sWZ);
-    const slopeMesh=new THREE.Mesh(sGeo,new THREE.MeshPhongMaterial({color:0x3a6a8a,shininess:20,side:THREE.DoubleSide}));
-    const qX=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),Math.PI/2);
-    const qZ=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1), isUphill ? theta : -theta);
-    slopeMesh.quaternion.multiplyQuaternions(qZ,qX);
-    const slopeCX = (sWX/2)*cosT;
-    const slopeCY = isUphill ? (sWX/2)*sinT : -(sWX/2)*sinT;
-    slopeMesh.position.set(slopeCX, slopeCY, 0); slopeMesh.receiveShadow=true; scene.add(slopeMesh);
-    const sLine=new THREE.LineSegments(new THREE.EdgesGeometry(sGeo),new THREE.LineBasicMaterial({color:0x00ffaa}));
-    sLine.quaternion.multiplyQuaternions(qZ,qX); sLine.position.copy(slopeMesh.position); scene.add(sLine);
+    const slopeGroup = new THREE.Group();
+    scene.add(slopeGroup);
+    slopeMeshRef.current = null;
+    sLineRef.current = null;
+
+    const updateSlope = () => {
+      if(slopeMeshRef.current) slopeGroup.remove(slopeMeshRef.current);
+      if(sLineRef.current) slopeGroup.remove(sLineRef.current);
+
+      const sinT=Math.sin(theta), cosT=Math.cos(theta);
+      const safeSinT = Math.max(Math.abs(sinT), 0.1);
+      
+      const uphillPeakH = isUphill ? Math.max(
+        calcY_up(calcStopTime(I_solid),          I_solid),
+        calcY_up(calcStopTime(I_hollowSphere),   I_hollowSphere),
+        calcY_up(calcStopTime(I_cylinder),       I_cylinder),
+        calcY_up(calcStopTime(I_hollowCylinder), I_hollowCylinder)
+      ) : 0;
+      
+      let sWX = isUphill 
+        ? (uphillPeakH/safeSinT)*1.15
+        : Math.min(liveHeight/safeSinT, 100);
+      
+      if(!isFinite(sWX) || sWX <= 0) {
+        sWX = 20;
+      }
+      
+      const sWZ=2*(4*r+2*gap);
+      const sGeo=new THREE.PlaneGeometry(sWX,sWZ);
+      const slopeMesh=new THREE.Mesh(sGeo,new THREE.MeshPhongMaterial({color:0x3a6a8a,shininess:20,side:THREE.DoubleSide}));
+      const qX=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),Math.PI/2);
+      const qZ=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1), isUphill ? theta : -theta);
+      slopeMesh.quaternion.multiplyQuaternions(qZ,qX);
+      const slopeCX = isUphill ? (sWX/2)*cosT : (liveHeight/(2*safeSinT))*cosT;
+      const slopeCY = isUphill ? (sWX/2)*sinT : -(liveHeight/(2*safeSinT))*sinT;
+      slopeMesh.position.set(slopeCX, slopeCY, 0); slopeMesh.receiveShadow=true; 
+      slopeGroup.add(slopeMesh);
+      slopeMeshRef.current = slopeMesh;
+
+      const sLine=new THREE.LineSegments(new THREE.EdgesGeometry(sGeo),new THREE.LineBasicMaterial({color:0x00ffaa}));
+      sLine.quaternion.multiplyQuaternions(qZ,qX); sLine.position.copy(slopeMesh.position); 
+      slopeGroup.add(sLine);
+      sLineRef.current = sLine;
+    };
+
+    updateSlope();
 
     const mkStripes=(cA,cB,n=8)=>{
       const sz=512,cv=document.createElement('canvas'); cv.width=cv.height=sz;
@@ -288,7 +348,7 @@ function MultiSphereSimulation() {
       const L=(ca,cb)=>Math.round(ca+(cb-ca)*t);
       return '#'+[L((ai>>16)&0xff,(bi>>16)&0xff),L((ai>>8)&0xff,(bi>>8)&0xff),L(ai&0xff,bi&0xff)].map(v=>v.toString(16).padStart(2,'0')).join('');
     };
-    const hT=(hollowSpherThickness-0.01)/0.98*0.85;
+    const hT=(liveHollowSph-0.01)/0.98*0.85;
     const solidSphereTex=mkStripes('#ff5533','#880011');
     const hollowSphereTex=mkStripes(lerpHex('#ffccbb','#ff5533',hT),lerpHex('#cc8877','#880011',hT));
     const solidCylTex=mkStripes('#2244dd','#001177');
@@ -297,7 +357,7 @@ function MultiSphereSimulation() {
     const sphere=new THREE.Mesh(new THREE.SphereGeometry(r,32,32),new THREE.MeshPhongMaterial({map:solidSphereTex,shininess:80}));
     sphere.castShadow=true; scene.add(sphere); sphereRef.current=sphere;
 
-    const hSphInR=(1-hollowSpherThickness)*r;
+    const hSphInR=(1-liveHollowSph)*r;
     const hSphG=new THREE.Group();
     hSphG.add(new THREE.Mesh(new THREE.SphereGeometry(r,32,32),new THREE.MeshPhongMaterial({map:hollowSphereTex,shininess:80,side:THREE.FrontSide})));
     hSphG.add(new THREE.Mesh(new THREE.SphereGeometry(r,32,32),new THREE.MeshPhongMaterial({color:0xcc3333,shininess:40,side:THREE.BackSide})));
@@ -311,7 +371,7 @@ function MultiSphereSimulation() {
     const bCap=new THREE.Mesh(new THREE.CircleGeometry(r,32),capMat); bCap.rotation.x=Math.PI/2; bCap.position.y=-r; sCylG.add(bCap);
     sCylG.castShadow=true; scene.add(sCylG); cylinderRef.current=sCylG;
 
-    const hCylInR=(1-hollowCylinderThickness)*r;
+    const hCylInR=(1-liveHollowCyl)*r;
     const hCylG=new THREE.Group();
     hCylG.add(new THREE.Mesh(new THREE.CylinderGeometry(r,r,2*r,32,1,true),new THREE.MeshPhongMaterial({map:hollowCylTex,shininess:80,side:THREE.DoubleSide})));
     hCylG.add(new THREE.Mesh(new THREE.CylinderGeometry(hCylInR,hCylInR,2*r+0.01,32,1,true),new THREE.MeshPhongMaterial({transparent:true,opacity:0,side:THREE.BackSide})));
@@ -322,8 +382,9 @@ function MultiSphereSimulation() {
 
     const trail=new THREE.Group(); scene.add(trail); trailRef.current=trail;
     const rl=new THREE.Group(); scene.add(rl); rankingLabelRef.current=rl;
+    const markers=new THREE.Group(); scene.add(markers); markersRef.current=markers;
 
-    const axO=new THREE.Vector3(-5.5,0,0),axL=2.5;
+    const axO=new THREE.Vector3(-6.0,0,1.9), axL=2.5;
     const mkLbl=(txt,col)=>{
       const cv=document.createElement('canvas'); cv.width=256; cv.height=128;
       const ctx=cv.getContext('2d'); ctx.fillStyle=col; ctx.font='bold 88px Arial';
@@ -356,14 +417,41 @@ function MultiSphereSimulation() {
       renderer.dispose();
       if(mountRef.current&&renderer.domElement.parentNode===mountRef.current)
         mountRef.current.removeChild(renderer.domElement);
-      // 參數改變 → 清空快取，強制下一次重建
       const mkC = () => ({ allPts:[], lastT:-1, chunkStart:0, completedMeshes:[], currentMesh:null });
       trailCacheRef.current = { solid:mkC(), hollow:mkC(), cylinder:mkC(), hollowCyl:mkC() };
     };
-  },[slopeAngle,slopeHeight,initSpeed,hollowSpherThickness,hollowCylinderThickness]);
+  },[liveAngle,liveHeight,liveInitSpeed,liveHollowSph,liveHollowCyl]);
 
   useEffect(()=>{
     if(!sphereRef.current) return;
+    
+    if(isUphill && slopeMeshRef.current){
+      const sinT=Math.sin(theta), cosT=Math.cos(theta);
+      const peakHeights = [
+        {I: I_solid, peakH: calcY_up(calcStopTime(I_solid), I_solid)},
+        {I: I_hollowSphere, peakH: calcY_up(calcStopTime(I_hollowSphere), I_hollowSphere)},
+        {I: I_cylinder, peakH: calcY_up(calcStopTime(I_cylinder), I_cylinder)},
+        {I: I_hollowCylinder, peakH: calcY_up(calcStopTime(I_hollowCylinder), I_hollowCylinder)}
+      ];
+      const highestPeak = Math.max(...peakHeights.map(p => p.peakH));
+      const safeSinT = Math.max(Math.abs(sinT), 0.1);
+      const sWX = (highestPeak/safeSinT)*1.15;
+      const sWZ=2*(4*r+2*gap);
+      if(isFinite(sWX) && sWX > 0){
+        const newGeo = new THREE.PlaneGeometry(sWX,sWZ);
+        slopeMeshRef.current.geometry.dispose();
+        slopeMeshRef.current.geometry = newGeo;
+        const slopeCX = (sWX/2)*cosT;
+        const slopeCY = (sWX/2)*sinT;
+        slopeMeshRef.current.position.set(slopeCX, slopeCY, 0);
+        if(sLineRef.current){
+          sLineRef.current.geometry.dispose();
+          sLineRef.current.geometry = new THREE.EdgesGeometry(newGeo);
+          sLineRef.current.position.copy(slopeMeshRef.current.position);
+        }
+      }
+    }
+    
     const rl=rankingLabelRef.current;
     const z0=-(3*r+1.5*gap), z1=-(r+0.5*gap), z2=r+0.5*gap, z3=3*r+1.5*gap;
 
@@ -373,10 +461,10 @@ function MultiSphereSimulation() {
       const k=calcK(tClamped,I);
       if(isCyl){
         const qx=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),Math.PI/2);
-        const qz=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1), -k);  // 順時針
+        const qz=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1), -k);
         mesh.quaternion.multiplyQuaternions(qz,qx);
       } else {
-        mesh.rotation.z = -k;  // 順時針（爬坡/下坡都向右滾）
+        mesh.rotation.z = -k;
       }
     };
     updObj(sphereRef.current,        I_solid,          maxTime_solid,          z0,false);
@@ -384,34 +472,15 @@ function MultiSphereSimulation() {
     updObj(cylinderRef.current,      I_cylinder,       maxTime_cylinder,       z2,true);
     updObj(hollowCylinderRef.current,I_hollowCylinder, maxTime_hollowCylinder, z3,true);
 
+    // rankingLabelRef 留空（排名直接整合進 marker 標籤）
     while(rl.children.length>0) rl.remove(rl.children[0]);
-    if(allStopped){
-      const showRank=(mesh,rank)=>{
-        if(rank==null) return;
-        const cv=document.createElement('canvas'); cv.width=cv.height=256;
-        const ctx=cv.getContext('2d');
-        ctx.fillStyle='rgba(0,0,0,0.8)'; ctx.beginPath(); ctx.arc(128,128,120,0,Math.PI*2); ctx.fill();
-        ctx.strokeStyle='#ffff00'; ctx.lineWidth=4; ctx.beginPath(); ctx.arc(128,128,120,0,Math.PI*2); ctx.stroke();
-        ctx.fillStyle='#ffff00'; ctx.font='bold 120px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(rank,128,128);
-        const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv)}));
-        sp.scale.set(1.5,1.5,1.5); sp.position.copy(mesh.position); sp.position.y+=2; rl.add(sp);
-      };
-      showRank(sphereRef.current,        getRank('solid',     solidStopped));
-      showRank(hollowSphereRef.current,  getRank('hollow',    hollowStopped));
-      showRank(cylinderRef.current,      getRank('cylinder',  cylinderStopped));
-      showRank(hollowCylinderRef.current,getRank('hollowCyl', hollowCylStopped));
-    }
 
-    // ── 軌跡：增量快取分塊，只重建末尾 chunk，舊 chunk 凍結 ──
-    // 核心思路：DT 步長採樣後存入 allPts，每滿 CHUNK 點就「凍結」成獨立 Mesh，
-    // 只有最後不足 CHUNK 的「活躍 chunk」在每幀重建，代價 O(chunk) 而非 O(N)。
-    // 時間後退（倒播/拖拉條）時才全部重建，代價 O(N) 但發生頻率低。
     {
       const trail   = trailRef.current;
       const cache   = trailCacheRef.current;
-      const DT      = timeStep / 5;   // 採樣步長 ≈ 0.004s，視覺夠細
-      const CHUNK   = 48;             // 每塊控制點數
-      const OVERLAP = 4;              // 塊間重疊點，確保接縫平滑
+      const DT      = timeStep / 5;
+      const CHUNK   = 48;
+      const OVERLAP = 4;
       const TUBE_R  = 0.06;
       const TUBE_SEG= 7;
 
@@ -423,7 +492,6 @@ function MultiSphereSimulation() {
       };
 
       const buildTube = (pts, color) => {
-        // 去空間重複點
         const clean = [pts[0]];
         for (let i=1; i<pts.length; i++)
           if (pts[i].distanceTo(clean[clean.length-1]) > 1e-5) clean.push(pts[i]);
@@ -441,7 +509,6 @@ function MultiSphereSimulation() {
         const tEnd = Math.min(time, maxT);
         const c = cache[key];
 
-        // ① 時間後退 → 完整重建
         if (tEnd < c.lastT - 1e-4) {
           c.completedMeshes.forEach(m => removeMesh(m));
           removeMesh(c.currentMesh);
@@ -454,7 +521,6 @@ function MultiSphereSimulation() {
 
         if (tEnd <= 0) return;
 
-        // ② 追加新點（從上次結尾往後）
         const startI = c.lastT < 0 ? 0 : Math.floor(c.lastT / DT) + 1;
         let appended = 0;
         for (let i = startI; ; i++) {
@@ -466,7 +532,6 @@ function MultiSphereSimulation() {
           appended++;
           if (t >= tEnd) break;
         }
-        // 確保精確終點
         if (c.allPts.length > 0) {
           const exactEnd = getPointPosition(tEnd, I, z);
           if (exactEnd.distanceTo(c.allPts[c.allPts.length-1]) > 1e-5) {
@@ -475,7 +540,6 @@ function MultiSphereSimulation() {
           }
         }
 
-        // ③ 把滿了的 chunk 凍結為獨立 Mesh（只執行一次，之後不再碰）
         while (c.allPts.length - c.chunkStart >= CHUNK + OVERLAP) {
           const chunkPts = c.allPts.slice(c.chunkStart, c.chunkStart + CHUNK + OVERLAP);
           const mesh = buildTube(chunkPts, color);
@@ -483,7 +547,6 @@ function MultiSphereSimulation() {
           c.chunkStart += CHUNK;
         }
 
-        // ④ 只重建活躍 chunk（最後不足 CHUNK 的部分）
         removeMesh(c.currentMesh);
         const activePts = c.allPts.slice(c.chunkStart);
         c.currentMesh = activePts.length >= 2 ? buildTube(activePts, color) : null;
@@ -496,44 +559,311 @@ function MultiSphereSimulation() {
       updateTrail('hollowCyl', I_hollowCylinder, maxTime_hollowCylinder, z3, 0xaabbff);
     }
 
-    const allPos=[
-      {I:I_solid,ref:sphereRef,maxT:maxTime_solid},
-      {I:I_hollowSphere,ref:hollowSphereRef,maxT:maxTime_hollowSphere},
-      {I:I_cylinder,ref:cylinderRef,maxT:maxTime_cylinder},
-      {I:I_hollowCylinder,ref:hollowCylinderRef,maxT:maxTime_hollowCylinder},
-    ];
-    let trackMesh=sphereRef.current;
-    if(isUphill){
-      let bestY=-Infinity;
-      allPos.forEach(({I,ref,maxT})=>{
-        const tC=Math.min(time,maxT);
-        const yv=getObjectPosition(tC,I,0).y;
-        if(yv>bestY){bestY=yv;trackMesh=ref.current;}
-      });
-    } else {
-      let fastY=calcY_down(time,I_solid);
-      allPos.slice(1).forEach(({I,ref,maxT})=>{
-        const y=calcY_down(time,I);
-        if(y>fastY&&time<maxT){fastY=y;trackMesh=ref.current;}
-      });
-    }
-    if(cameraRef.current&&trackMesh){
-      const tx=trackMesh.position.x, ty=trackMesh.position.y;
-      // 上下坡相同邏輯，上坡時 z 固定避免切換追蹤目標跳動
-      if(isUphill){
-        cameraRef.current.position.set(tx, ty+8, cameraRef.current.position.z);
-        cameraRef.current.lookAt(tx, ty-5, cameraRef.current.position.z-13);
-      } else {
-        cameraRef.current.position.copy(trackMesh.position).add(new THREE.Vector3(0,8,13));
-        cameraRef.current.lookAt(tx, ty-5, trackMesh.position.z);
+    if(cameraRef.current){
+      const cam=cameraRef.current;
+      const meshes=[sphereRef,hollowSphereRef,cylinderRef,hollowCylinderRef]
+        .map(r=>r.current).filter(Boolean);
+      
+      if(meshes.length===4){
+        const positions = meshes.map(m=>m.position);
+        const centerX = positions.reduce((a,b)=>a+b.x,0)/4;
+        const centerY = positions.reduce((a,b)=>a+b.y,0)/4;
+        const maxDistX = Math.max(...positions.map(p=>Math.abs(p.x-centerX)));
+        const maxDistY = Math.max(...positions.map(p=>Math.abs(p.y-centerY)));
+        const maxDist = Math.max(maxDistX, maxDistY) + 3.5;
+        
+        const fovRad = cam.fov * Math.PI / 360;
+        const tanFov = Math.tan(fovRad);
+        
+        let targetZ = 9;
+        if(tanFov > 0.001 && maxDist > 0) {
+          targetZ = Math.max(maxDist / tanFov * 0.5 + 1, 8);
+        }
+        
+        if(isNaN(targetZ) || !isFinite(targetZ)) {
+          targetZ = 9;
+        }
+        
+        const curZ = cam.position.z;
+        const newZ = curZ + (targetZ - curZ) * 0.08;
+        
+        if(isNaN(newZ) || !isFinite(newZ)) {
+          return;
+        }
+        
+        const ndcs = positions.map(p => p.clone().project(cam));
+        
+        const xCoords = ndcs.map(v => v.x);
+        const minX = Math.min(...xCoords);
+        const maxX = Math.max(...xCoords);
+        
+        const yCoords = ndcs.map(v => v.y);
+        const minY = Math.min(...yCoords);
+        const maxY = Math.max(...yCoords);
+        
+        // ✅ FIX: Changed const → let so these can be reassigned inside the while loop
+        let leftMargin = minX + 1;
+        let rightMargin = 1 - maxX;
+        let topMargin = 1 - maxY;
+        let bottomMargin = minY + 1;
+        
+        let finalZ = newZ;
+        let safetyCounter = 0;
+        
+        while(safetyCounter < 10) {
+          const leftRightDiff = Math.abs(leftMargin - rightMargin);
+          const topBottomDiff = Math.abs(topMargin - bottomMargin);
+          const minMargin = Math.min(leftMargin, rightMargin, topMargin, bottomMargin);
+          
+          if(leftRightDiff <= 0.2 && topBottomDiff <= 0.2 && minMargin >= 0.05) break;
+          
+          finalZ *= 1.05;
+          
+          const tempCam = cam.clone();
+          tempCam.position.z = finalZ;
+          tempCam.updateProjectionMatrix();
+          const newNdcs = positions.map(p => p.clone().project(tempCam));
+          
+          const newXCoords = newNdcs.map(v => v.x);
+          const newMinX = Math.min(...newXCoords);
+          const newMaxX = Math.max(...newXCoords);
+          
+          const newYCoords = newNdcs.map(v => v.y);
+          const newMinY = Math.min(...newYCoords);
+          const newMaxY = Math.max(...newYCoords);
+          
+          // ✅ These reassignments now work correctly with let
+          leftMargin = newMinX + 1;
+          rightMargin = 1 - newMaxX;
+          topMargin = 1 - newMaxY;
+          bottomMargin = newMinY + 1;
+          
+          safetyCounter++;
+        }
+        
+        // 攝影機跟隨：先設初始位置，再用 NDC 投影直接修正 X 和 Y 邊界
+        {
+          const allY    = meshes.map(m => m.position.y);
+          const allX    = meshes.map(m => m.position.x);
+          const maxObjY = Math.max(...allY);
+          const minObjY = Math.min(...allY);
+          const midY    = (maxObjY + minObjY) / 2;
+          const rangeY  = maxObjY - minObjY;
+          cam.position.set(centerX, midY + 18 + rangeY * 0.5, 8);
+          cam.lookAt(centerX, midY - 10 - rangeY * 0.5, 0);
+          cam.updateProjectionMatrix();
+
+          // NDC 邊界修正：確保所有物體在 ±(1-MARGIN) 內，最多迭代 5 次
+          const MARGIN = 0.12;
+          for(let iter = 0; iter < 5; iter++) {
+            const ndcs  = positions.map(p => p.clone().project(cam));
+            const ndcXs = ndcs.map(v => v.x);
+            const ndcYs = ndcs.map(v => v.y);
+            const maxNX = Math.max(...ndcXs), minNX = Math.min(...ndcXs);
+            const maxNY = Math.max(...ndcYs), minNY = Math.min(...ndcYs);
+
+            // 計算 NDC → 世界單位的換算（用 unproject）
+            const fovR  = cam.fov * Math.PI / 180;
+            const depthZ = Math.abs(cam.position.z);
+            const halfW = Math.tan(fovR / 2) * cam.aspect * depthZ;
+            const halfH = Math.tan(fovR / 2) * depthZ;
+
+            let dX = 0, dY = 0;
+            // X 修正：右側超出 → 攝影機往右；左側超出 → 攝影機往左
+            if(maxNX > 1 - MARGIN) dX += (maxNX - (1 - MARGIN)) * halfW;
+            if(minNX < -1 + MARGIN) dX += (minNX - (-1 + MARGIN)) * halfW;
+            // Y 修正：上側超出(NDC Y 大) → lookAt 上移；下側超出 → lookAt 下移
+            if(maxNY > 1 - MARGIN) dY += (maxNY - (1 - MARGIN)) * halfH;
+            if(minNY < -1 + MARGIN) dY += (minNY - (-1 + MARGIN)) * halfH;
+
+            if(Math.abs(dX) < 0.001 && Math.abs(dY) < 0.001) break;
+
+            // 同時平移攝影機和 lookAt
+            cam.position.x += dX;
+            cam.position.y += dY;
+            // 重新 lookAt（維持原始視角方向只平移）
+            const midY2  = (Math.max(...meshes.map(m=>m.position.y)) + Math.min(...meshes.map(m=>m.position.y))) / 2;
+            const range2 = Math.max(...meshes.map(m=>m.position.y)) - Math.min(...meshes.map(m=>m.position.y));
+            cam.lookAt(cam.position.x, midY2 - 10 - range2 * 0.5 + dY, 0);
+            cam.updateProjectionMatrix();
+          }
+        }
+
+        // 標記：永遠顯示在物體左右側，固定螢幕大小，整合排名
+        const showMarkers = true;
+
+        while(markersRef.current.children.length > 0) {
+          markersRef.current.remove(markersRef.current.children[0]);
+        }
+
+        if(showMarkers) {
+          const MARKER_NAMES = ['實心球','空心球','實心柱','空心柱'];
+          const MARKER_COLORS_BG     = ['#aa1a00','#bb3311','#0d1eaa','#1f2fbb'];
+          const MARKER_COLORS_BORDER = ['#ff6644','#ff9977','#5577ff','#7799ff'];
+
+          // 基準：攝影機距離 BASE_DIST 時 scale = BASE_SCALE
+          // 每個物體各自計算距離，分開補償
+          const BASE_DIST  = 20;
+          const BASE_SCALE = 2.4;
+
+          const makeMarkerTex = (idx, rank) => {
+            const cv = document.createElement('canvas');
+            cv.width = 340; cv.height = 200;
+            const ctx = cv.getContext('2d');
+            const hasRank = rank != null;
+
+            // 氣泡形狀：主矩形 + 側邊三角指針
+            const isLeft = SCREEN_SIDE[idx] < 0; // 標記在左側，指針朝右
+            const bx = isLeft ? 10 : 50;
+            const by = 10;
+            const bw = isLeft ? 280 : 280;
+            const bh = 180;
+            const br = 28;
+
+            // 背景圓角矩形
+            ctx.fillStyle = MARKER_COLORS_BG[idx];
+            ctx.beginPath();
+            ctx.moveTo(bx+br, by);
+            ctx.lineTo(bx+bw-br, by); ctx.quadraticCurveTo(bx+bw, by, bx+bw, by+br);
+            ctx.lineTo(bx+bw, by+bh-br); ctx.quadraticCurveTo(bx+bw, by+bh, bx+bw-br, by+bh);
+            ctx.lineTo(bx+br, by+bh); ctx.quadraticCurveTo(bx, by+bh, bx, by+bh-br);
+            ctx.lineTo(bx, by+br); ctx.quadraticCurveTo(bx, by, bx+br, by);
+            ctx.closePath(); ctx.fill();
+
+            // 三角指針（朝向物體方向）
+            ctx.fillStyle = MARKER_COLORS_BG[idx];
+            ctx.beginPath();
+            if(isLeft) {
+              // 標記在左側，指針朝右
+              ctx.moveTo(bx+bw, by+bh/2 - 22);
+              ctx.lineTo(bx+bw+40, by+bh/2);
+              ctx.lineTo(bx+bw, by+bh/2 + 22);
+            } else {
+              // 標記在右側，指針朝左
+              ctx.moveTo(bx, by+bh/2 - 22);
+              ctx.lineTo(bx-40, by+bh/2);
+              ctx.lineTo(bx, by+bh/2 + 22);
+            }
+            ctx.closePath(); ctx.fill();
+
+            // 邊框
+            ctx.strokeStyle = MARKER_COLORS_BORDER[idx];
+            ctx.lineWidth = 5;
+            ctx.beginPath();
+            ctx.moveTo(bx+br, by);
+            ctx.lineTo(bx+bw-br, by); ctx.quadraticCurveTo(bx+bw, by, bx+bw, by+br);
+            ctx.lineTo(bx+bw, by+bh-br); ctx.quadraticCurveTo(bx+bw, by+bh, bx+bw-br, by+bh);
+            ctx.lineTo(bx+br, by+bh); ctx.quadraticCurveTo(bx, by+bh, bx, by+bh-br);
+            ctx.lineTo(bx, by+br); ctx.quadraticCurveTo(bx, by, bx+br, by);
+            ctx.closePath(); ctx.stroke();
+
+            // 名稱文字
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 52px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            const cx = bx + bw/2;
+
+            if(hasRank) {
+              // 排名 badge（左上角小圓）
+              const rx = isLeft ? bx+44 : bx+bw-44;
+              const ry = by+44;
+              ctx.fillStyle = '#ffdd00';
+              ctx.beginPath(); ctx.arc(rx, ry, 38, 0, Math.PI*2); ctx.fill();
+              ctx.fillStyle = '#000';
+              ctx.font = 'bold 44px Arial';
+              ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.fillText(rank, rx, ry);
+              // 名稱（中央）
+              ctx.fillStyle = '#ffffff';
+              ctx.font = 'bold 50px Arial';
+              ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.fillText(MARKER_NAMES[idx], cx, by+bh/2+4);
+            } else {
+              ctx.fillStyle = '#ffffff';
+              ctx.font = 'bold 52px Arial';
+              ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.fillText(MARKER_NAMES[idx], cx, by+bh/2);
+            }
+
+            return new THREE.CanvasTexture(cv);
+          };
+
+          const RANKS = [
+            getRealTimeRank('solid',     solidStopped),
+            getRealTimeRank('hollow',    hollowStopped),
+            getRealTimeRank('cylinder',  cylinderStopped),
+            getRealTimeRank('hollowCyl', hollowCylStopped),
+          ];
+
+          // 螢幕空間偏移：把物體投影到 NDC，X 方向偏移後反投影回世界座標
+          // z0,z1(實心/空心球) → 螢幕左側；z2,z3(實心/空心柱) → 螢幕右側
+          const SCREEN_SIDE = [-1, -1, 1, 1]; // -1=左, +1=右
+
+          meshes.forEach((mesh, idx) => {
+            // 每個物體分開計算攝影機距離，補償 sprite 大小讓螢幕視覺大小固定
+            const meshCamDist   = cam.position.distanceTo(mesh.position);
+            const markerScale   = BASE_SCALE * (meshCamDist / BASE_DIST);
+            const markerSpriteH = markerScale;
+            const markerSpriteW = markerScale * (340/200);
+
+            // 指針尖端距 sprite 中心比例 = 0.471（由 canvas 幾何決定，固定值）
+            const TIP_RATIO  = 0.471;
+            const tipOffsetW = markerSpriteW * TIP_RATIO; // 世界單位
+
+            // 1. 計算物體在當前攝影機下 1 世界單位 = 幾 NDC
+            const pA = mesh.position.clone().project(cam);
+            const pB = mesh.position.clone().add(new THREE.Vector3(1,0,0)).project(cam);
+            const ndcPerWorld = Math.abs(pB.x - pA.x) || 0.05;
+
+            // 2. sprite 中心偏移 = (物體半徑 r + tipOffsetW) * ndcPerWorld
+            const ndcShift = SCREEN_SIDE[idx] * (r + tipOffsetW) * ndcPerWorld;
+            const ndc = pA.clone();
+            ndc.x += ndcShift;
+
+            // 3. 反投影回世界座標（保持同深度）
+            const camPos   = cam.position.clone();
+            const meshDist = camPos.distanceTo(mesh.position);
+            const worldDir = ndc.clone().unproject(cam).sub(camPos).normalize();
+            const finalPos = camPos.clone().add(worldDir.multiplyScalar(meshDist));
+
+            const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+              map: makeMarkerTex(idx, RANKS[idx]),
+              transparent: true,
+              depthTest: false
+            }));
+            sp.scale.set(markerSpriteW, markerSpriteH, 1);
+            sp.position.copy(finalPos);
+            sp.renderOrder = 998;
+            markersRef.current.add(sp);
+          });
+        }
+        
       }
     }
-  },[time,slopeAngle,slopeHeight,initSpeed,hollowSpherThickness,hollowCylinderThickness,solidStopped,hollowStopped,cylinderStopped,hollowCylStopped,allStopped]);
+  },[time,liveAngle,liveHeight,liveInitSpeed,liveHollowSph,liveHollowCyl,solidStopped,hollowStopped,cylinderStopped,hollowCylStopped,allStopped]);
 
-  useEffect(()=>{setPlaying(false);setTime(0);setSpeed(1);speedRef.current=1;speedIdxRef.current=7;},[slopeAngle,slopeHeight,initSpeed]);
-  useEffect(()=>{setPlaying(false);setTime(0);setSpeed(1);speedRef.current=1;speedIdxRef.current=7;},[hollowSpherThickness,hollowCylinderThickness]);
+  useEffect(()=>{
+    setPlaying(false);
+    setTime(0);
+    setSpeed(1);
+    speedRef.current=1;
+    speedIdxRef.current=7;
+    const mkC = () => ({ allPts:[], lastT:-1, chunkStart:0, completedMeshes:[], currentMesh:null });
+    trailCacheRef.current = { solid:mkC(), hollow:mkC(), cylinder:mkC(), hollowCyl:mkC() };
+  },[committedAngle,committedHeight,committedInitSpd]);
 
-  const getDisplayY=(I,maxT)=> isUphill ? calcY_up(Math.min(time,maxT),I) : Math.min(calcY_down(time,I),slopeHeight);
+  useEffect(()=>{
+    setPlaying(false);
+    setTime(0);
+    setSpeed(1);
+    speedRef.current=1;
+    speedIdxRef.current=7;
+    const mkC = () => ({ allPts:[], lastT:-1, chunkStart:0, completedMeshes:[], currentMesh:null });
+    trailCacheRef.current = { solid:mkC(), hollow:mkC(), cylinder:mkC(), hollowCyl:mkC() };
+  },[committedHollowSph,committedHollowCyl]);
+
+  const getDisplayY=(I,maxT)=> isUphill ? calcY_up(Math.min(time,maxT),I) : Math.min(calcY_down(time,I),liveHeight);
   const getDisplayK=(I,maxT)=> calcK(Math.min(time,maxT),I);
   const getPeakY=(I)=> calcY_up(calcStopTime(I),I);
 
@@ -545,10 +875,6 @@ function MultiSphereSimulation() {
   const k_cylinder   = getDisplayK(I_cylinder,      maxTime_cylinder);
   const y_hollow_cyl = getDisplayY(I_hollowCylinder,maxTime_hollowCylinder);
   const k_hollow_cyl = getDisplayK(I_hollowCylinder,maxTime_hollowCylinder);
-
-  const rankList = isUphill
-    ? [getPeakY(I_solid),getPeakY(I_hollowSphere),getPeakY(I_cylinder),getPeakY(I_hollowCylinder)].sort((a,b)=>b-a)
-    : [maxTime_solid,maxTime_hollowSphere,maxTime_cylinder,maxTime_hollowCylinder].sort((a,b)=>a-b);
 
   const speedIdx   = SPEEDS.indexOf(speed);
   const isNegSpd   = speed < 0;
@@ -588,17 +914,44 @@ function MultiSphereSimulation() {
     </div>
   );
 
+  const draftIsUphill = draftAngle < 0;
+  
+  const resetOnParamChange = () => {
+    setPlaying(false);
+    setTime(0);
+    setSpeed(1);
+    speedRef.current=1;
+    speedIdxRef.current=7;
+    if(rankingLabelRef.current){
+      while(rankingLabelRef.current.children.length>0){
+        rankingLabelRef.current.remove(rankingLabelRef.current.children[0]);
+      }
+    }
+    if(trailRef.current){
+      while(trailRef.current.children.length>0){
+        const child = trailRef.current.children[0];
+        if(child.geometry) child.geometry.dispose();
+        if(child.material) child.material.dispose();
+        trailRef.current.remove(child);
+      }
+    }
+    const mkC = () => ({ allPts:[], lastT:-1, chunkStart:0, completedMeshes:[], currentMesh:null });
+    trailCacheRef.current = { solid:mkC(), hollow:mkC(), cylinder:mkC(), hollowCyl:mkC() };
+  };
+  
   const paramRows = [
     {
-      label: isUphill ? 'θ 斜面角度 (爬坡)' : 'θ 斜面角度 (下坡)',
+      label: draftIsUphill ? 'θ 斜面角度 (爬坡)' : 'θ 斜面角度 (下坡)',
       cls:'sa', min:-89, max:89, step:1,
-      val:slopeAngle, set:setSlopeAngle, unit:'°', color:'#ff6464', toFixed:0
+      val:draftAngle,
+      set:(v)=>{ const vv=v===0?(draftAngle>0?-1:1):v; setDraftAngle(vv); setLiveAngle(vv); resetOnParamChange(); },
+      unit:'°', color:'#ff6464', toFixed:0
     },
-    isUphill
-      ? {label:'初速 V', cls:'sh', min:0.1, max:50, step:0.1, val:initSpeed, set:setInitSpeed, unit:' m/s', color:'#ffaa44', toFixed:1}
-      : {label:'斜面高度 H', cls:'sh', min:1, max:30, step:0.5, val:slopeHeight, set:setSlopeHeight, unit:' m', color:'#64c864', toFixed:1},
-    {label:'空心球壁厚 x', cls:'ss', min:0.01, max:0.99, step:0.01, val:hollowSpherThickness, set:setHollowSphereThickness, unit:'', color:'#ff8888', toFixed:2},
-    {label:'空心柱壁厚 x', cls:'sc', min:0.01, max:0.99, step:0.01, val:hollowCylinderThickness, set:setHollowCylinderThickness, unit:'', color:'#8888ff', toFixed:2},
+    draftIsUphill
+      ? {label:'初速 V', cls:'sh', min:0.1, max:50, step:0.1, val:draftInitSpd, set:(v)=>{setDraftInitSpd(v);setLiveInitSpeed(v);resetOnParamChange();}, unit:' m/s', color:'#ffaa44', toFixed:1}
+      : {label:'斜面高度 H', cls:'sh', min:1, max:30, step:0.5, val:draftHeight, set:(v)=>{setDraftHeight(v);setLiveHeight(v);resetOnParamChange();}, unit:' m', color:'#64c864', toFixed:1},
+    {label:'空心球壁厚 x', cls:'ss', min:0.01, max:0.99, step:0.01, val:draftHollowSph, set:(v)=>{setDraftHollowSph(v);setLiveHollowSph(v);resetOnParamChange();}, unit:'', color:'#ff8888', toFixed:2},
+    {label:'空心柱壁厚 x', cls:'sc', min:0.01, max:0.99, step:0.01, val:draftHollowCyl, set:(v)=>{setDraftHollowCyl(v);setLiveHollowCyl(v);resetOnParamChange();}, unit:'', color:'#8888ff', toFixed:2},
   ];
 
   const distLabel = isUphill ? '上升距離' : '下降距離';
@@ -628,7 +981,7 @@ function MultiSphereSimulation() {
 
       {isUphill && (
         <div style={{background:'linear-gradient(90deg,rgba(255,160,80,0.18),rgba(255,200,80,0.12))',borderBottom:'1px solid rgba(255,160,80,0.35)',padding:'4px 16px',textAlign:'center',fontSize:'11px',fontWeight:'bold',color:'#ffaa44',letterSpacing:'1.5px',flexShrink:0}}>
-          ▲ 爬坡模式 ▲ &nbsp;|&nbsp; V = {initSpeed} m/s &nbsp;|&nbsp; θ = {Math.abs(slopeAngle)}°
+          ▲ 爬坡模式 ▲ &nbsp;|&nbsp; V = {liveInitSpeed} m/s &nbsp;|&nbsp; θ = {Math.abs(liveAngle)}°
         </div>
       )}
 
@@ -638,7 +991,13 @@ function MultiSphereSimulation() {
 
         <div style={{padding:'14px 16px 8px'}}>
 
-          <div style={{marginBottom:'10px'}}>
+          {isAdjusting && (
+            <div style={{background:'rgba(255,200,80,0.1)',border:'1px solid rgba(255,200,80,0.3)',borderRadius:'8px',padding:'9px 14px',textAlign:'center',fontSize:'11px',color:'#ffcc44',marginBottom:'10px',letterSpacing:'0.5px',lineHeight:'1.6'}}>
+              🔧 調整參數中 — 視覺即刻更新<br/><span style={{fontSize:'10px',color:'#aaa'}}>關閉「參數控制」面板後才更新耗時計算</span>
+            </div>
+          )}
+
+          <div style={{display:isAdjusting?'none':undefined,marginBottom:'10px'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px'}}>
               <span className="cl" style={{margin:0}}>運動時間 t</span>
               <span style={{fontSize:'18px',fontWeight:'bold',color:'#00ff88'}}>
@@ -651,40 +1010,75 @@ function MultiSphereSimulation() {
               style={{width:'100%'}} />
           </div>
 
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1.4fr 1fr',gap:'8px',marginBottom:'4px',alignItems:'start'}}>
-            <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'4px'}}>
-              <div style={{fontSize:'10px',color:'#888',textAlign:'center'}}><span style={kbdStyle}>←</span> 負向加速</div>
-              <button className="pb"
-                style={{width:'100%',height:'44px',fontSize:'22px',borderColor:'rgba(255,200,80,0.35)',color:speedIdx<=0?'rgba(255,200,80,0.25)':'#ffcc44',background:'rgba(255,200,80,0.07)',opacity:speedIdx<=0?0.4:1}}
-                onPointerDown={pd(()=>{ if(speedIdx>0) handleSetSpeed(SPEEDS[speedIdx-1]); })}>&#x23EA;</button>
+          <div style={{display:isAdjusting?'none':undefined,marginBottom:'12px'}}>
+            <div style={{justifyContent:'center',gap:'4px',marginBottom:'8px',flexWrap:'wrap',display:'flex'}}>
+              {SPEEDS.map(s=>(
+                <div key={s} className="spd-chip" onPointerDown={pd(()=>handleSetSpeed(s))}
+                  style={{fontWeight:s===speed?'bold':'normal',color:s===speed?(s<0?'#ffaa44':'#88aaff'):'#555',background:s===speed?(s<0?'rgba(255,160,80,0.18)':'rgba(100,150,255,0.15)'):'transparent',border:`1px solid ${s===speed?(s<0?'rgba(255,160,80,0.4)':'rgba(100,150,255,0.4)'):'rgba(255,255,255,0.1)'}`}}>
+                  {s<0?`◀${Math.abs(s)}`:`${s}▶`}
+                </div>
+              ))}
             </div>
-            <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'4px'}}>
-              <div style={{fontSize:'10px',color:'#888',textAlign:'center'}}><span style={kbdStyle}>Space</span> 播放/暫停</div>
-              <button className="pb"
-                style={{width:'100%',height:'44px',fontSize:'15px',borderColor:'rgba(0,255,136,0.4)',color:'#00ff88',background:playing?'rgba(0,255,136,0.18)':'rgba(0,255,136,0.07)'}}
-                onPointerDown={pd(()=>setPlaying(p=>!p))}>
-                {playing ? '⏸ 暫停' : '▶ 播放'}
-              </button>
-              <div style={{fontSize:'13px',fontWeight:'bold',color:isNegSpd?'#ffaa44':'#88aaff',letterSpacing:'1px'}}>{speedLabel}</div>
-            </div>
-            <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'4px'}}>
-              <div style={{fontSize:'10px',color:'#888',textAlign:'center'}}><span style={kbdStyle}>→</span> 正向加速</div>
-              <button className="pb"
-                style={{width:'100%',height:'44px',fontSize:'22px',borderColor:'rgba(255,200,80,0.35)',color:speedIdx>=SPEEDS.length-1?'rgba(255,200,80,0.25)':'#ffcc44',background:'rgba(255,200,80,0.07)',opacity:speedIdx>=SPEEDS.length-1?0.4:1}}
-                onPointerDown={pd(()=>{ if(speedIdx<SPEEDS.length-1) handleSetSpeed(SPEEDS[speedIdx+1]); })}>&#x23E9;</button>
-            </div>
-          </div>
 
-          <div style={{display:'flex',justifyContent:'center',gap:'4px',marginBottom:'12px',flexWrap:'wrap'}}>
-            {SPEEDS.map(s=>(
-              <div key={s} className="spd-chip" onPointerDown={pd(()=>handleSetSpeed(s))}
-                style={{fontWeight:s===speed?'bold':'normal',color:s===speed?(s<0?'#ffaa44':'#88aaff'):'#555',background:s===speed?(s<0?'rgba(255,160,80,0.18)':'rgba(100,150,255,0.15)'):'transparent',border:`1px solid ${s===speed?(s<0?'rgba(255,160,80,0.4)':'rgba(100,150,255,0.4)'):'rgba(255,255,255,0.1)'}`}}>
-                {s<0?`◀${Math.abs(s)}`:`${s}▶`}
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1.4fr 1fr',gap:'8px',marginBottom:'0',alignItems:'start'}}>
+              <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'4px'}}>
+                <div style={{fontSize:'10px',color:'#888',textAlign:'center',height:'16px'}}><span style={kbdStyle}>←</span></div>
+                <button className="pb"
+                  style={{width:'100%',height:'44px',fontSize:'22px',borderColor:'rgba(255,200,80,0.35)',color:speedIdx<=0?'rgba(255,200,80,0.25)':'#ffcc44',background:'rgba(255,200,80,0.07)',opacity:speedIdx<=0?0.4:1}}
+                  onPointerDown={pd(()=>{ if(speedIdx>0) handleSetSpeed(SPEEDS[speedIdx-1]); })}>&#x23EA;</button>
               </div>
-            ))}
+              <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'4px'}}>
+                <div style={{fontSize:'10px',color:'#888',textAlign:'center',height:'16px'}}><span style={kbdStyle}>Space</span></div>
+                <button className="pb"
+                  style={{width:'100%',height:'44px',fontSize:'15px',borderColor:'rgba(0,255,136,0.4)',color:'#00ff88',background:playing?'rgba(0,255,136,0.18)':'rgba(0,255,136,0.07)'}}
+                  onPointerDown={pd(()=>setPlaying(p=>!p))}>
+                  {playing ? '⏸ 暫停' : '▶ 播放'}
+                </button>
+                <div style={{fontSize:'13px',fontWeight:'bold',color:isNegSpd?'#ffaa44':'#88aaff',letterSpacing:'1px'}}>{speedLabel}</div>
+              </div>
+              <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'4px'}}>
+                <div style={{fontSize:'10px',color:'#888',textAlign:'center',height:'16px'}}><span style={kbdStyle}>→</span></div>
+                <button className="pb"
+                  style={{width:'100%',height:'44px',fontSize:'22px',borderColor:'rgba(255,200,80,0.35)',color:speedIdx>=SPEEDS.length-1?'rgba(255,200,80,0.25)':'#ffcc44',background:'rgba(255,200,80,0.07)',opacity:speedIdx>=SPEEDS.length-1?0.4:1}}
+                  onPointerDown={pd(()=>{ if(speedIdx<SPEEDS.length-1) handleSetSpeed(SPEEDS[speedIdx+1]); })}>&#x23E9;</button>
+              </div>
+            </div>
           </div>
 
-          <div onPointerDown={pd(()=>setSecPanel(p=>{ if(p){setSecParams(false);setSecData(false);setSecFormula(false);}else{if(scrollRef.current)scrollRef.current.scrollTop=0;}return !p; }))}
+          <div onPointerDown={pd(()=>setSecPanel(p=>{ if(p){ if(secParams){ 
+            const ang = draftAngle===0?(draftAngle>0?1:-1):draftAngle;
+            setLiveAngle(ang);
+            setLiveHeight(draftHeight);
+            setLiveInitSpeed(draftInitSpd);
+            setLiveHollowSph(draftHollowSph);
+            setLiveHollowCyl(draftHollowCyl);
+            setCommittedAngle(ang);
+            setCommittedHeight(draftHeight);
+            setCommittedInitSpd(draftInitSpd);
+            setCommittedHollowSph(draftHollowSph);
+            setCommittedHollowCyl(draftHollowCyl);
+            setPlaying(false);
+            setTime(0);
+            setSpeed(1);
+            speedRef.current=1;
+            speedIdxRef.current=7;
+            if(rankingLabelRef.current){
+              while(rankingLabelRef.current.children.length>0){
+                rankingLabelRef.current.remove(rankingLabelRef.current.children[0]);
+              }
+            }
+            if(trailRef.current){
+              while(trailRef.current.children.length>0){
+                const child = trailRef.current.children[0];
+                if(child.geometry) child.geometry.dispose();
+                if(child.material) child.material.dispose();
+                trailRef.current.remove(child);
+              }
+            }
+            const mkC = () => ({ allPts:[], lastT:-1, chunkStart:0, completedMeshes:[], currentMesh:null });
+            trailCacheRef.current = { solid:mkC(), hollow:mkC(), cylinder:mkC(), hollowCyl:mkC() };
+            setIsAdjusting(false); 
+          } setSecParams(false);setSecData(false);setSecFormula(false);}else{if(scrollRef.current)scrollRef.current.scrollTop=0;}return !p; }))}
             style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'9px 14px',borderRadius:'9px',cursor:'pointer',background:secPanel?'linear-gradient(90deg,rgba(0,255,136,0.10) 0%,rgba(100,150,255,0.08) 100%)':'rgba(255,255,255,0.04)',border:`1px solid ${secPanel?'rgba(0,255,136,0.35)':'rgba(255,255,255,0.1)'}`,transition:'all 0.25s ease',userSelect:'none',WebkitTapHighlightColor:'transparent',touchAction:'manipulation'}}>
             <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:'3px',textAlign:'center'}}>
               <span style={{fontSize:'12px',fontWeight:'bold',letterSpacing:'1.2px',textTransform:'uppercase',color:secPanel?'#e0e0e0':'#777',transition:'color 0.25s ease'}}>詳細面板</span>
@@ -698,8 +1092,52 @@ function MultiSphereSimulation() {
           <div ref={scrollRef} style={{maxHeight:'calc(50vh - 130px)',overflowY:'auto',overflowX:'hidden',WebkitOverflowScrolling:'touch',padding:'4px 16px 20px'}}>
 
             <div style={{marginBottom:'10px'}}>
-              <SectionHeader title="參數控制" open={secParams} onToggle={()=>setSecParams(p=>!p)} accent="#00ff88"
-                count={isUphill?"θ 斜面角度 · 初速 V\n空心球壁厚 · 空心柱壁厚":"θ 斜面角度 · 斜面高度 H\n空心球壁厚 · 空心柱壁厚"} />
+              <SectionHeader title="參數控制" open={secParams} onToggle={()=>{
+                if(secParams){
+                  const ang = draftAngle===0?(draftAngle>0?1:-1):draftAngle;
+                  setLiveAngle(ang);
+                  setLiveHeight(draftHeight);
+                  setLiveInitSpeed(draftInitSpd);
+                  setLiveHollowSph(draftHollowSph);
+                  setLiveHollowCyl(draftHollowCyl);
+                  setCommittedAngle(ang);
+                  setCommittedHeight(draftHeight);
+                  setCommittedInitSpd(draftInitSpd);
+                  setCommittedHollowSph(draftHollowSph);
+                  setCommittedHollowCyl(draftHollowCyl);
+                  setPlaying(false);
+                  setTime(0);
+                  setSpeed(1);
+                  speedRef.current=1;
+                  speedIdxRef.current=7;
+                  if(rankingLabelRef.current){
+                    while(rankingLabelRef.current.children.length>0){
+                      rankingLabelRef.current.remove(rankingLabelRef.current.children[0]);
+                    }
+                  }
+                  if(trailRef.current){
+                    while(trailRef.current.children.length>0){
+                      const child = trailRef.current.children[0];
+                      if(child.geometry) child.geometry.dispose();
+                      if(child.material) child.material.dispose();
+                      trailRef.current.remove(child);
+                    }
+                  }
+                  const mkC = () => ({ allPts:[], lastT:-1, chunkStart:0, completedMeshes:[], currentMesh:null });
+                  trailCacheRef.current = { solid:mkC(), hollow:mkC(), cylinder:mkC(), hollowCyl:mkC() };
+                  setIsAdjusting(false);
+                } else {
+                  setDraftAngle(liveAngle);
+                  setDraftHeight(liveHeight);
+                  setDraftInitSpd(liveInitSpeed);
+                  setDraftHollowSph(liveHollowSph);
+                  setDraftHollowCyl(liveHollowCyl);
+                  setIsAdjusting(true);
+                  setPlaying(false);
+                }
+                setSecParams(p=>!p);
+              }} accent="#00ff88"
+                count={draftIsUphill?"θ 斜面角度 · 初速 V\n空心球壁厚 · 空心柱壁厚":"θ 斜面角度 · 斜面高度 H\n空心球壁厚 · 空心柱壁厚"} />
               <div className={`collapsible-body ${secParams?'open':'closed'}`} style={{maxHeight:secParams?'400px':'0'}}>
                 <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'14px',paddingBottom:'4px'}}>
                   {paramRows.map(({label,cls,min,max,step,val,set,unit,color,toFixed})=>(
@@ -724,14 +1162,14 @@ function MultiSphereSimulation() {
 
             <div style={{marginBottom:'10px'}}>
               <SectionHeader title="物體數據" open={secData} onToggle={()=>setSecData(p=>!p)} accent="#88aaff"
-                count={`實心球 · 空心球 · 實心圓柱 · 空心圓柱\nt = ${time.toFixed(2)}s${isUphill?' | 等待全部停止':''}` } />
+                count={`實心球 · 空心球 · 實心圓柱 · 空心圓柱\nt = ${time.toFixed(2)}s`} />
               <div className={`collapsible-body ${secData?'open':'closed'}`} style={{maxHeight:secData?'700px':'0'}}>
                 <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'10px',paddingBottom:'4px'}}>
                   {[
                     {label:'實心球',   sub:'',                                        color:'#ff6464',bg:'rgba(255,68,68,0.1)',   border:'rgba(255,68,68,0.3)',  I:I_solid,         y:y_solid,      k:k_solid,      stopped:solidStopped,    maxT:maxTime_solid,         peakY:getPeakY(I_solid),         rankKey:'solid'},
-                    {label:'空心球',   sub:` x=${hollowSpherThickness.toFixed(2)}`,    color:'#ff8888',bg:'rgba(255,100,68,0.08)',border:'rgba(255,100,100,0.3)',I:I_hollowSphere,  y:y_hollow,     k:k_hollow,     stopped:hollowStopped,   maxT:maxTime_hollowSphere,  peakY:getPeakY(I_hollowSphere),  rankKey:'hollow'},
+                    {label:'空心球',   sub:` x=${liveHollowSph.toFixed(2)}`,    color:'#ff8888',bg:'rgba(255,100,68,0.08)',border:'rgba(255,100,100,0.3)',I:I_hollowSphere,  y:y_hollow,     k:k_hollow,     stopped:hollowStopped,   maxT:maxTime_hollowSphere,  peakY:getPeakY(I_hollowSphere),  rankKey:'hollow'},
                     {label:'實心圓柱', sub:'',                                        color:'#6464ff',bg:'rgba(68,68,255,0.1)',   border:'rgba(68,68,255,0.3)',  I:I_cylinder,      y:y_cylinder,   k:k_cylinder,   stopped:cylinderStopped, maxT:maxTime_cylinder,      peakY:getPeakY(I_cylinder),      rankKey:'cylinder'},
-                    {label:'空心圓柱', sub:` x=${hollowCylinderThickness.toFixed(2)}`, color:'#8888ff',bg:'rgba(68,68,255,0.08)', border:'rgba(100,100,255,0.3)',I:I_hollowCylinder,y:y_hollow_cyl, k:k_hollow_cyl, stopped:hollowCylStopped,maxT:maxTime_hollowCylinder,peakY:getPeakY(I_hollowCylinder),rankKey:'hollowCyl'},
+                    {label:'空心圓柱', sub:` x=${liveHollowCyl.toFixed(2)}`, color:'#8888ff',bg:'rgba(68,68,255,0.08)', border:'rgba(100,100,255,0.3)',I:I_hollowCylinder,y:y_hollow_cyl, k:k_hollow_cyl, stopped:hollowCylStopped,maxT:maxTime_hollowCylinder,peakY:getPeakY(I_hollowCylinder),rankKey:'hollowCyl'},
                   ].map(({label,sub,color,bg,border,I,y,k,stopped,maxT,peakY,rankKey})=>(
                     <div key={label} className="card" style={{background:bg,border:`1px solid ${border}`}}>
                       <div style={{color,fontWeight:'bold',marginBottom:'4px'}}>{label}{sub}</div>
@@ -741,9 +1179,11 @@ function MultiSphereSimulation() {
                       {isUphill && stopped && (
                         <div style={{color:'#aaffcc',marginTop:'4px',fontSize:'11px'}}>最高點 = {peakY.toFixed(3)} m</div>
                       )}
-                      {stopped && allStopped && (
+                      {stopped && (
                         <div style={{color:'#ffff44',marginTop:'2px',fontSize:'11px'}}>
-                          {isUphill ? `✓ 第${rankList.indexOf(isUphill?peakY:maxT)!==-1?rankList.indexOf(isUphill?peakY:maxT)+1:'?'}名` : `✓ ${maxT.toFixed(2)}s — 第${rankList.indexOf(maxT)+1}名`}
+                          {isUphill 
+                            ? `✓ 停止時間 ${calcStopTime(I).toFixed(2)}s — 第${getRealTimeRank(rankKey, true)}名` 
+                            : `✓ ${maxT.toFixed(2)}s — 第${getRealTimeRank(rankKey, true)}名`}
                         </div>
                       )}
                       {stopped && !allStopped && (
@@ -767,7 +1207,7 @@ function MultiSphereSimulation() {
                     {isUphill ? '▲ 爬坡模式' : '▼ 下坡模式'}
                   </div>
 
-                  <div style={{color:'#ffff88',marginBottom:'8px'}}>r={r} m | m={m} kg | g={g} m/s² | θ={Math.abs(slopeAngle)}°{isUphill?` | V=${initSpeed} m/s`:` | H=${slopeHeight} m`}</div>
+                  <div style={{color:'#ffff88',marginBottom:'8px'}}>r={r} m | m={m} kg | g={g} m/s² | θ={Math.abs(liveAngle)}°{isUphill?` | V=${liveInitSpeed} m/s`:` | H=${liveHeight} m`}</div>
 
                   <div style={{marginBottom:'10px'}}>
                     <span className="fk">轉動慣量：</span><br/>
@@ -791,7 +1231,7 @@ function MultiSphereSimulation() {
                   ) : (
                     <div style={{marginBottom:'10px'}}>
                       <span className="fk">下降垂直距離【下坡】：</span><br/>
-                      y(t) 即為下降垂直距離，上限為 H = {slopeHeight} m
+                      y(t) 即為下降垂直距離，上限為 H = {liveHeight} m
                     </div>
                   )}
 
@@ -841,7 +1281,7 @@ function MultiSphereSimulation() {
                         <span style={{color:'#aaffcc'}}>推導：接觸點 = 球心 + r × 順時針旋轉(初始接觸向量, k)</span><br/>
                         初始接觸向量（球心→接觸點）= (−sinθ, −cosθ)<br/>
                         旋轉方向：順時針（向右下滾 = ω &lt; 0）<br/><br/>
-                        x_p = x_c + r·sinθ·(1−cos k) − r·cosθ·sin k<br/>
+                        x_p = x_c + r·sinθ·(1−cos k) − r·cosT·sin k<br/>
                         y_p = y_c + r·cosθ·(1−cos k) + r·sinθ·sin k<br/>
                         z_p = zOffset<br/>
                         <span style={{color:'#888',fontSize:'10px'}}>x_c = y/tanθ + r·sinθ，y_c = −y + r·cosθ</span>
