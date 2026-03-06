@@ -652,7 +652,7 @@ function MultiSphereSimulation() {
           cam.updateProjectionMatrix();
 
           // NDC 邊界修正：X 超出 → 拉遠 Z，Y 超出 → 調整 Y，最多迭代 6 次
-          const MARGIN = 0.12;
+          const MARGIN = 0.28;
           for(let iter = 0; iter < 6; iter++) {
             const ndcs  = positions.map(p => p.clone().project(cam));
             const maxNX = Math.max(...ndcs.map(v => v.x));
@@ -704,12 +704,25 @@ function MultiSphereSimulation() {
             const ctx = cv.getContext('2d');
             const hasRank = rank != null;
 
-            // 氣泡形狀：主矩形 + 側邊三角指針
-            const isLeft = SCREEN_SIDE[idx] < 0; // 標記在左側，指針朝右
-            const bx = isLeft ? 10 : 50;
-            const by = 10;
-            const bw = isLeft ? 280 : 280;
-            const bh = 180;
+            // 氣泡形狀：依方向決定指針位置
+            const dir = MARKER_DIR[idx];
+            const isLeft  = dir === 'left';
+            const isRight = dir === 'right';
+            const isUp    = dir === 'up';
+            const isDown  = dir === 'down';
+
+            // 左右方向：340x200 canvas，指針在左/右側
+            // 上下方向：340x200 canvas（橫向），指針在下/上側中央
+            // isUp：氣泡在上方，指針朝下指向物體 → 指針在底部
+            //   bx=30, by=10, bw=280, bh=140, 指針 y=150~190(尖端190)
+            //   指針尖距canvas底(200) = 10, 距中心y=(10+140/2)=80, 距離=190-80=110 → TIP_Y=110/200=0.55
+            // isDown：氣泡在下方，指針朝上指向物體 → 指針在頂部
+            //   bx=30, by=50, bw=280, bh=140, 指針 y=10~50(尖端10)
+            //   指針尖距canvas頂(0) = 10, 中心y=(50+140/2)=120, 距離=120-10=110 → TIP_Y=110/200=0.55
+            const bx = (isUp || isDown) ? 30 : (isLeft ? 10 : 50);
+            const by = isDown ? 50 : 10;
+            const bw = 280;
+            const bh = (isUp || isDown) ? 140 : 180;
             const br = 28;
 
             // 背景圓角矩形
@@ -726,15 +739,23 @@ function MultiSphereSimulation() {
             ctx.fillStyle = MARKER_COLORS_BG[idx];
             ctx.beginPath();
             if(isLeft) {
-              // 標記在左側，指針朝右
               ctx.moveTo(bx+bw, by+bh/2 - 22);
               ctx.lineTo(bx+bw+40, by+bh/2);
               ctx.lineTo(bx+bw, by+bh/2 + 22);
-            } else {
-              // 標記在右側，指針朝左
+            } else if(isRight) {
               ctx.moveTo(bx, by+bh/2 - 22);
               ctx.lineTo(bx-40, by+bh/2);
               ctx.lineTo(bx, by+bh/2 + 22);
+            } else if(isUp) {
+              // 標記在上方，指針朝下指向物體，在氣泡底部中央
+              ctx.moveTo(bx+bw/2 - 22, by+bh);
+              ctx.lineTo(bx+bw/2,      190);
+              ctx.lineTo(bx+bw/2 + 22, by+bh);
+            } else {
+              // 標記在下方，指針朝上指向物體，在氣泡頂部中央
+              ctx.moveTo(bx+bw/2 - 22, by);
+              ctx.lineTo(bx+bw/2,      10);
+              ctx.lineTo(bx+bw/2 + 22, by);
             }
             ctx.closePath(); ctx.fill();
 
@@ -788,37 +809,67 @@ function MultiSphereSimulation() {
             getRealTimeRank('hollowCyl', hollowCylStopped),
           ];
 
-          // 螢幕空間偏移：把物體投影到 NDC，X 方向偏移後反投影回世界座標
-          // z0,z1(實心/空心球) → 螢幕左側；z2,z3(實心/空心柱) → 螢幕右側
-          const SCREEN_SIDE = [-1, -1, 1, 1]; // -1=左, +1=右
+          // 決定各物體標籤方向：
+          // idx0=實心球, idx1=空心球, idx2=實心柱, idx3=空心柱
+          // 實心球→螢幕上方(-Z世界/NDC+Y)，空心柱→螢幕下方(+Z世界/NDC-Y)
+          // 空心球 vs 實心柱：比較目前位置 x，誰的 x 大誰跑得快
+          // 如果空心球比實心球快(x更大)：空心球→右側(+X)，實心柱→左側(-X)
+          // 否則：空心球→左側(-X)，實心柱→右側(+X)
+          const xSolidSphere  = meshes[0].position.x;
+          const xHollowSphere = meshes[1].position.x;
+          const xCylinder     = meshes[2].position.x;
+          const hollowFaster  = xHollowSphere > xCylinder;
+
+          // direction: 'left'(-X), 'right'(+X), 'up'(+NDC Y), 'down'(-NDC Y)
+          const MARKER_DIR = [
+            'up',                          // 實心球 → 上
+            hollowFaster ? 'right' : 'left', // 空心球
+            hollowFaster ? 'left' : 'right', // 實心柱
+            'down',                        // 空心柱 → 下
+          ];
+
+          // 螢幕空間偏移：把物體投影到 NDC，依方向偏移後反投影
+          const SCREEN_SIDE = MARKER_DIR.map(d => d === 'left' ? -1 : d === 'right' ? 1 : 0);
 
           meshes.forEach((mesh, idx) => {
-            // 計算此物體當前距攝影機距離
             const currDist = cam.position.distanceTo(mesh.position);
-            const prevDist = prevCamDistRef.current[idx];
-            // 等比例縮放：距離增加→放大，距離縮小→縮小
-            // 以 BASE_DIST 為基準，讓螢幕上視覺大小固定
+            prevCamDistRef.current[idx] = currDist;
             const markerScale   = BASE_SCALE * (currDist / BASE_DIST);
             const markerSpriteH = markerScale;
             const markerSpriteW = markerScale * (340/200);
-            // 更新距離記錄
-            prevCamDistRef.current[idx] = currDist;
 
-            // 指針尖端距 sprite 中心比例 = 0.471（由 canvas 幾何決定，固定值）
-            const TIP_RATIO  = 0.471;
-            const tipOffsetW = markerSpriteW * TIP_RATIO; // 世界單位
+            const dir = MARKER_DIR[idx];
+            const TIP_RATIO = 0.471;
 
-            // 1. 計算物體在當前攝影機下 1 世界單位 = 幾 NDC
             const pA = mesh.position.clone().project(cam);
-            const pB = mesh.position.clone().add(new THREE.Vector3(1,0,0)).project(cam);
-            const ndcPerWorld = Math.abs(pB.x - pA.x) || 0.05;
+            // 計算 NDC 單位換算（X 和 Y 方向）
+            const pBx = mesh.position.clone().add(new THREE.Vector3(1,0,0)).project(cam);
+            const pBy = mesh.position.clone().add(new THREE.Vector3(0,1,0)).project(cam);
+            const ndcPerWorldX = Math.abs(pBx.x - pA.x) || 0.05;
+            const ndcPerWorldY = Math.abs(pBy.y - pA.y) || 0.05;
 
-            // 2. sprite 中心偏移 = (物體半徑 r + tipOffsetW) * ndcPerWorld
-            const ndcShift = SCREEN_SIDE[idx] * (r + tipOffsetW) * ndcPerWorld;
             const ndc = pA.clone();
-            ndc.x += ndcShift;
+            if(dir === 'left' || dir === 'right') {
+              const TIP_RATIO_X = 0.471;
+              const tipOffsetW = markerSpriteW * TIP_RATIO_X;
+              const side = dir === 'left' ? -1 : 1;
+              ndc.x += side * (r + tipOffsetW) * ndcPerWorldX;
+            } else {
+              // up/down：沿世界 Z 軸偏移（實心球往+Z，空心柱往-Z）
+              // 攝影機從+Z看，世界+Z = 螢幕「上方」(前景)，-Z = 螢幕「下方」(背景)
+              // 但螢幕上的 NDC Y 對應世界 Y，世界 Z 對應螢幕 Z 深度（不直接是Y）
+              // 正確做法：把偏移後的世界座標直接投影到 NDC
+              const TIP_RATIO_Y = 0.55; // 指針尖距sprite中心 / spriteH = 110/200
+              const tipOffsetH = markerSpriteH * TIP_RATIO_Y;
+              const worldZSide = dir === 'up' ? -1 : 1; // up=-Z世界(螢幕上方), down=+Z世界(螢幕下方)
+              const offsetPos = mesh.position.clone().add(
+                new THREE.Vector3(0, 0, worldZSide * (r + tipOffsetH))
+              );
+              const ndcOffset = offsetPos.clone().project(cam);
+              ndc.x = ndcOffset.x;
+              ndc.y = ndcOffset.y;
+            }
 
-            // 3. 反投影回世界座標（保持同深度）
             const camPos   = cam.position.clone();
             const meshDist = camPos.distanceTo(mesh.position);
             const worldDir = ndc.clone().unproject(cam).sub(camPos).normalize();
