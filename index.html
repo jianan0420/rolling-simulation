@@ -51,6 +51,8 @@ function MultiSphereSimulation() {
   const trailCacheRef = useRef(null);
   // 記錄四個物體上一幀距攝影機的距離，用來等比例縮放標籤
   const prevCamDistRef = useRef([20, 20, 20, 20]);
+  const markerDirRef      = useRef(['up','left','right','down']);
+  const markerCooldownRef = useRef([0, 0, 0, 0]); // 換方向後的冷卻幀數
   if (!trailCacheRef.current) {
     trailCacheRef.current = { solid:mkCache(), hollow:mkCache(), cylinder:mkCache(), hollowCyl:mkCache() };
   }
@@ -78,6 +80,7 @@ function MultiSphereSimulation() {
   const [isAdjusting,    setIsAdjusting]    = useState(false);
   // 開啟參數面板時的快照，用來判斷關閉時是否有修改
   const paramSnapshotRef = useRef(null);
+  const liveUpdateRafRef = useRef(null); // debounce live state updates via rAF
 
   const [playing, setPlaying] = useState(false);
   const [displaySpeed, setDisplaySpeed] = useState(1);
@@ -129,27 +132,11 @@ function MultiSphereSimulation() {
     return high;
   };
 
-  const committedIsUphill = committedAngle < 0;
-  const committedTheta    = Math.abs(committedAngle) * Math.PI / 180;
-  const I_solid_c          = 0.4 * m * r * r;
-  const I_hollowSphere_c   = 0.4*((1-Math.pow(1-committedHollowSph,5))/(1-Math.pow(1-committedHollowSph,3)))*m*r*r;
-  const I_cylinder_c       = 0.5 * m * r * r;
-  const I_hollowCylinder_c = 0.5*((1-Math.pow(1-committedHollowCyl,4))/(1-Math.pow(1-committedHollowCyl,2)))*m*r*r;
-  const calcY_down_c = (t,I) => { const c=(m*r*r*g)/(m*r*r+I),s=Math.sin(committedTheta); return c*s*s*t*t/2; };
-  const calcY_up_c   = (t,I) => Math.max(0, committedInitSpd*t*Math.sin(committedTheta) - calcY_down_c(t,I));
-  const calcStopTime_c = (I) => { const c=(m*r*r*g)/(m*r*r+I),s=Math.sin(committedTheta); return (committedInitSpd*s)/(c*s*s); };
-  const calcMaxTime_down_c = (I) => {
-    const c=(m*r*r*g)/(m*r*r+I),s=Math.sin(committedTheta);
-    let t=Math.sqrt(Math.max((2*committedHeight)/(c*s*s),0.01));
-    let low=t*0.99,high=t*1.05;
-    for(let i=0;i<20;i++){const mid=(low+high)/2;if(calcY_down_c(mid,I)<committedHeight)low=mid;else high=mid;}
-    return high;
-  };
 
-  const maxTime_solid          = committedIsUphill ? calcStopTime_c(I_solid_c)          : calcMaxTime_down_c(I_solid_c);
-  const maxTime_hollowSphere   = committedIsUphill ? calcStopTime_c(I_hollowSphere_c)   : calcMaxTime_down_c(I_hollowSphere_c);
-  const maxTime_cylinder       = committedIsUphill ? calcStopTime_c(I_cylinder_c)       : calcMaxTime_down_c(I_cylinder_c);
-  const maxTime_hollowCylinder = committedIsUphill ? calcStopTime_c(I_hollowCylinder_c) : calcMaxTime_down_c(I_hollowCylinder_c);
+  const maxTime_solid          = isUphill ? calcStopTime(I_solid)          : calcMaxTime_down(I_solid);
+  const maxTime_hollowSphere   = isUphill ? calcStopTime(I_hollowSphere)   : calcMaxTime_down(I_hollowSphere);
+  const maxTime_cylinder       = isUphill ? calcStopTime(I_cylinder)       : calcMaxTime_down(I_cylinder);
+  const maxTime_hollowCylinder = isUphill ? calcStopTime(I_hollowCylinder) : calcMaxTime_down(I_hollowCylinder);
   const maxTime   = Math.max(maxTime_solid,maxTime_hollowSphere,maxTime_cylinder,maxTime_hollowCylinder);
   const sliderMax = Math.ceil(maxTime/timeStep)*timeStep;
 
@@ -700,15 +687,116 @@ function MultiSphereSimulation() {
           const MARKER_COLORS_BG = ['#aa1a00','#bb3311','#0d1eaa','#1f2fbb'];
           const MARKER_COLORS_BD = ['#ff6644','#ff9977','#5577ff','#7799ff'];
 
-          const xHollowSphere = meshes[1].position.x;
-          const xCylinder     = meshes[2].position.x;
-          const hollowFaster  = xHollowSphere > xCylinder;
-          const MARKER_DIR = [
-            'up',
-            hollowFaster ? 'right' : 'left',
-            hollowFaster ? 'left'  : 'right',
-            'down',
-          ];
+          // ── 自動標籤方向：在螢幕空間選重疊最少的方向 ──
+          // 先預算各物體的 NDC 中心，以及每個方向的標籤 NDC bbox
+          // 然後依序為每個物體選最佳方向
+
+          const camDir = new THREE.Vector3();
+          cam.getWorldDirection(camDir);
+
+          const TARGET_NDC_H = 0.20;
+          const DIRS = ['up','down','left','right'];
+
+          // 計算某物體在某方向時，標籤的 NDC bbox {x0,y0,x1,y1}
+          const getLabelNDC = (mesh, dir) => {
+            const ndcM = mesh.position.clone().project(cam);
+            const ndcT = ndcM.clone(); ndcT.y += TARGET_NDC_H;
+            const wM   = ndcM.clone().unproject(cam);
+            const wT   = ndcT.clone().unproject(cam);
+            const dep  = mesh.position.clone().sub(cam.position).dot(camDir);
+            const dM   = wM.clone().sub(cam.position).normalize();
+            const dT   = wT.clone().sub(cam.position).normalize();
+            const pM2  = cam.position.clone().addScaledVector(dM, dep / dM.dot(camDir));
+            const pT2  = cam.position.clone().addScaledVector(dT, dep / dT.dot(camDir));
+            const sH   = pM2.distanceTo(pT2);
+            const sW   = sH * (340/200);
+            const camRight2 = new THREE.Vector3(1,0,0).applyQuaternion(cam.quaternion);
+            const camUp2    = new THREE.Vector3(0,1,0).applyQuaternion(cam.quaternion);
+            const tipW2 = sW * 0.471, tipH2 = sH * 0.45;
+            let center;
+            if(dir==='left')       center = mesh.position.clone().addScaledVector(camRight2,-r).addScaledVector(camRight2,-tipW2);
+            else if(dir==='right') center = mesh.position.clone().addScaledVector(camRight2, r).addScaledVector(camRight2, tipW2);
+            else if(dir==='up')    center = mesh.position.clone().addScaledVector(camUp2,    r).addScaledVector(camUp2,    tipH2);
+            else                   center = mesh.position.clone().addScaledVector(camUp2,   -r).addScaledVector(camUp2,   -tipH2);
+            const cNDC = center.clone().project(cam);
+            // NDC 半高 = TARGET_NDC_H/2，NDC 半寬 = 半高 * (340/200) / aspect
+            const ndcHh = TARGET_NDC_H / 2;
+            const ndcHw = ndcHh * (340/200) / cam.aspect;
+            return { x0:cNDC.x-ndcHw, y0:cNDC.y-ndcHh, x1:cNDC.x+ndcHw, y1:cNDC.y+ndcHh, cx:cNDC.x, cy:cNDC.y, sW, sH, camRight2, camUp2, tipW2, tipH2 };
+          };
+
+          // 計算兩個 bbox 的重疊面積
+          const overlap = (a, b) => {
+            const ox = Math.max(0, Math.min(a.x1,b.x1) - Math.max(a.x0,b.x0));
+            const oy = Math.max(0, Math.min(a.y1,b.y1) - Math.max(a.y0,b.y0));
+            return ox * oy;
+          };
+
+          // 物體自身的 NDC bbox：直接投影上/右邊緣，精確計算 NDC 半徑
+          const meshNDC = meshes.map(mesh => {
+            const ndc  = mesh.position.clone().project(cam);
+            const camR = new THREE.Vector3(1,0,0).applyQuaternion(cam.quaternion);
+            const camU = new THREE.Vector3(0,1,0).applyQuaternion(cam.quaternion);
+            const ndcR = mesh.position.clone().addScaledVector(camR, r).project(cam);
+            const ndcU = mesh.position.clone().addScaledVector(camU, r).project(cam);
+            const hrx  = Math.abs(ndcR.x - ndc.x);
+            const hry  = Math.abs(ndcU.y - ndc.y);
+            // 加一點 padding 避免剛好邊緣貼著
+            return { x0:ndc.x-hrx-0.01, y0:ndc.y-hry-0.01, x1:ndc.x+hrx+0.01, y1:ndc.y+hry+0.01 };
+          });
+
+          const hasCollision = (bbox, labelBBoxes, objBBoxes) => {
+            for(const lb of labelBBoxes) { if(overlap(bbox, lb) > 1e-6) return true; }
+            for(const ob of objBBoxes)   { if(overlap(bbox, ob) > 1e-6) return true; }
+            return false;
+          };
+
+          // 依序選方向：無碰撞就完全不動；有碰撞就找無碰撞的方向；
+          // 若四個方向都有碰撞，選最小碰撞的並鎖定（不再換）
+          const prevDirs   = markerDirRef.current;
+          const chosenDirs = [];
+          const chosenBBoxes = [];
+
+          meshes.forEach((mesh, idx) => {
+            const prevDir  = prevDirs[idx];
+            const prevBBox = getLabelNDC(mesh, prevDir);
+            // 排除自己的物體，只檢查其他三個
+            const otherMeshNDC = meshNDC.filter((_,i) => i !== idx);
+
+            // 無碰撞 → 完全不換
+            if(!hasCollision(prevBBox, chosenBBoxes, otherMeshNDC)) {
+              chosenDirs.push(prevDir);
+              chosenBBoxes.push(prevBBox);
+              return;
+            }
+
+            // 有碰撞 → 先找有無完全無碰撞的方向
+            const freeDirs = DIRS.filter(dir => {
+              const bbox = getLabelNDC(mesh, dir);
+              return !hasCollision(bbox, chosenBBoxes, otherMeshNDC);
+            });
+
+            if(freeDirs.length > 0) {
+              const chosen = freeDirs.includes(prevDir) ? prevDir : freeDirs[0];
+              chosenDirs.push(chosen);
+              chosenBBoxes.push(getLabelNDC(mesh, chosen));
+            } else {
+              // 四個方向都有碰撞 → 選最小重疊面積的
+              let bestDir = prevDir, bestScore = Infinity;
+              for(const dir of DIRS) {
+                const bbox = getLabelNDC(mesh, dir);
+                const score =
+                  chosenBBoxes.reduce((s,cb) => s + overlap(bbox,cb), 0) +
+                  otherMeshNDC.reduce((s,ob) => s + overlap(bbox,ob), 0);
+                if(score < bestScore) { bestScore = score; bestDir = dir; }
+              }
+              chosenDirs.push(bestDir);
+              chosenBBoxes.push(getLabelNDC(mesh, bestDir));
+            }
+          });
+
+          markerDirRef.current = chosenDirs;
+          const MARKER_DIR = chosenDirs;
 
           const RANKS = [
             getRealTimeRank('solid',     solidStopped),
@@ -776,14 +864,8 @@ function MultiSphereSimulation() {
             return new THREE.CanvasTexture(cv);
           };
 
-          // 攝影機朝向單位向量（view-plane 法向量）
-          const camDir = new THREE.Vector3();
-          cam.getWorldDirection(camDir);
-
           // 預先計算：把一個固定 NDC 高度反投影回世界單位，得到固定螢幕大小的 spriteH
           // 對每個物體用自己的 depth 做計算
-          const TARGET_NDC_H = 0.20; // 標籤佔 NDC 高度的 20%（即螢幕高度 10%）
-
           meshes.forEach((mesh, idx) => {
             const dir = MARKER_DIR[idx];
 
@@ -861,6 +943,8 @@ function MultiSphereSimulation() {
   },[time,liveAngle,liveHeight,liveInitSpeed,liveHollowSph,liveHollowCyl,solidStopped,hollowStopped,cylinderStopped,hollowCylStopped,allStopped]);
 
   const clearTrail = () => {
+    markerDirRef.current      = ['up','left','right','down'];
+    markerCooldownRef.current = [0, 0, 0, 0];
     if(trailRef.current){
       while(trailRef.current.children.length>0){
         const child = trailRef.current.children[0];
@@ -957,21 +1041,66 @@ function MultiSphereSimulation() {
     }
     clearTrail();
   };
+
+  // 拖動結束時才 commit（觸發耗時計算）
+  const commitParam = (angle, height, initSpd, hollowSph, hollowCyl) => {
+    const ang = angle === 0 ? (angle > 0 ? 1 : -1) : angle;
+    setCommittedAngle(ang);
+    setCommittedHeight(height);
+    setCommittedInitSpd(initSpd);
+    setCommittedHollowSph(hollowSph);
+    setCommittedHollowCyl(hollowCyl);
+    resetOnParamChange();
+  };
+
+  const commitRef = useRef({
+    angle: 30, height: 10, initSpd: 10, hollowSph: 0.5, hollowCyl: 0.5
+  });
   
+  // 用 rAF debounce 更新 live state，避免阻塞 UI 數值顯示
+  const scheduleLiveUpdate = (angle, height, initSpd, hollowSph, hollowCyl) => {
+    if(liveUpdateRafRef.current) cancelAnimationFrame(liveUpdateRafRef.current);
+    liveUpdateRafRef.current = requestAnimationFrame(() => {
+      setLiveAngle(angle);
+      setLiveHeight(height);
+      setLiveInitSpeed(initSpd);
+      setLiveHollowSph(hollowSph);
+      setLiveHollowCyl(hollowCyl);
+    });
+  };
+
   const paramRows = [
     {
       label: draftIsUphill ? 'θ 斜面角度 (爬坡)' : 'θ 斜面角度 (下坡)',
       cls:'sa', min:1, max:89, step:1,
       val: Math.abs(draftAngle),
-      set:(v)=>{ const vv = draftIsUphill ? -Math.abs(v) : Math.abs(v); setDraftAngle(vv); setLiveAngle(vv); resetOnParamChange(); },
+      set:(v)=>{
+        const vv = draftIsUphill ? -Math.abs(v) : Math.abs(v);
+        setDraftAngle(vv);
+        commitRef.current.angle = vv;
+        scheduleLiveUpdate(vv, commitRef.current.height, commitRef.current.initSpd, commitRef.current.hollowSph, commitRef.current.hollowCyl);
+      },
+      onRelease:()=>{ commitParam(commitRef.current.angle, commitRef.current.height, commitRef.current.initSpd, commitRef.current.hollowSph, commitRef.current.hollowCyl); },
       unit:'°', color:'#ff6464', toFixed:0,
-      toggleDir: ()=>{ const vv = -draftAngle; setDraftAngle(vv); setLiveAngle(vv); resetOnParamChange(); }
+      toggleDir: ()=>{ const vv = -draftAngle; setDraftAngle(vv); setLiveAngle(vv); commitRef.current.angle=vv; commitParam(vv, commitRef.current.height, commitRef.current.initSpd, commitRef.current.hollowSph, commitRef.current.hollowCyl); }
     },
     draftIsUphill
-      ? {label:'初速 V', cls:'sh', min:0.1, max:30, step:0.1, val:draftInitSpd, set:(v)=>{setDraftInitSpd(v);setLiveInitSpeed(v);resetOnParamChange();}, unit:' m/s', color:'#ffaa44', toFixed:1}
-      : {label:'斜面高度 H', cls:'sh', min:1, max:30, step:0.1, val:draftHeight, set:(v)=>{setDraftHeight(v);setLiveHeight(v);resetOnParamChange();}, unit:' m', color:'#64c864', toFixed:1},
-    {label:'空心球壁厚 x', cls:'ss', min:0.01, max:0.99, step:0.01, val:draftHollowSph, set:(v)=>{setDraftHollowSph(v);setLiveHollowSph(v);resetOnParamChange();}, unit:'', color:'#ff8888', toFixed:2},
-    {label:'空心柱壁厚 x', cls:'sc', min:0.01, max:0.99, step:0.01, val:draftHollowCyl, set:(v)=>{setDraftHollowCyl(v);setLiveHollowCyl(v);resetOnParamChange();}, unit:'', color:'#8888ff', toFixed:2},
+      ? {label:'初速 V', cls:'sh', min:0.1, max:30, step:0.1, val:draftInitSpd,
+          set:(v)=>{ setDraftInitSpd(v); commitRef.current.initSpd=v; scheduleLiveUpdate(commitRef.current.angle, commitRef.current.height, v, commitRef.current.hollowSph, commitRef.current.hollowCyl); },
+          onRelease:()=>{ commitParam(commitRef.current.angle, commitRef.current.height, commitRef.current.initSpd, commitRef.current.hollowSph, commitRef.current.hollowCyl); },
+          unit:' m/s', color:'#ffaa44', toFixed:1}
+      : {label:'斜面高度 H', cls:'sh', min:1, max:30, step:0.1, val:draftHeight,
+          set:(v)=>{ setDraftHeight(v); commitRef.current.height=v; scheduleLiveUpdate(commitRef.current.angle, v, commitRef.current.initSpd, commitRef.current.hollowSph, commitRef.current.hollowCyl); },
+          onRelease:()=>{ commitParam(commitRef.current.angle, commitRef.current.height, commitRef.current.initSpd, commitRef.current.hollowSph, commitRef.current.hollowCyl); },
+          unit:' m', color:'#64c864', toFixed:1},
+    {label:'空心球壁厚 x', cls:'ss', min:0.01, max:0.99, step:0.01, val:draftHollowSph,
+      set:(v)=>{ setDraftHollowSph(v); commitRef.current.hollowSph=v; scheduleLiveUpdate(commitRef.current.angle, commitRef.current.height, commitRef.current.initSpd, v, commitRef.current.hollowCyl); },
+      onRelease:()=>{ commitParam(commitRef.current.angle, commitRef.current.height, commitRef.current.initSpd, commitRef.current.hollowSph, commitRef.current.hollowCyl); },
+      unit:'', color:'#ff8888', toFixed:2},
+    {label:'空心柱壁厚 x', cls:'sc', min:0.01, max:0.99, step:0.01, val:draftHollowCyl,
+      set:(v)=>{ setDraftHollowCyl(v); commitRef.current.hollowCyl=v; scheduleLiveUpdate(commitRef.current.angle, commitRef.current.height, commitRef.current.initSpd, commitRef.current.hollowSph, v); },
+      onRelease:()=>{ commitParam(commitRef.current.angle, commitRef.current.height, commitRef.current.initSpd, commitRef.current.hollowSph, commitRef.current.hollowCyl); },
+      unit:'', color:'#8888ff', toFixed:2},
   ];
 
   const distLabel = isUphill ? '上升距離' : '下降距離';
@@ -1163,6 +1292,10 @@ function MultiSphereSimulation() {
                     angle: liveAngle, height: liveHeight, initSpd: liveInitSpeed,
                     hollowSph: liveHollowSph, hollowCyl: liveHollowCyl
                   };
+                  commitRef.current = {
+                    angle: liveAngle, height: liveHeight, initSpd: liveInitSpeed,
+                    hollowSph: liveHollowSph, hollowCyl: liveHollowCyl
+                  };
                   setDraftAngle(liveAngle);
                   setDraftHeight(liveHeight);
                   setDraftInitSpd(liveInitSpeed);
@@ -1176,7 +1309,7 @@ function MultiSphereSimulation() {
                 count={draftIsUphill?"θ 斜面角度 · 初速 V\n空心球壁厚 · 空心柱壁厚":"θ 斜面角度 · 斜面高度 H\n空心球壁厚 · 空心柱壁厚"} />
               <div className={`collapsible-body ${secParams?'open':'closed'}`} style={{maxHeight:secParams?'400px':'0'}}>
                 <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'14px',paddingBottom:'4px'}}>
-                  {paramRows.map(({label,cls,min,max,step,val,set,unit,color,toFixed,toggleDir})=>(
+                  {paramRows.map(({label,cls,min,max,step,val,set,onRelease,unit,color,toFixed,toggleDir})=>(
                     <div key={label}>
                       <div className="cl" style={{display:'flex',alignItems:'center',gap:'6px'}}>
                         <span>{label}</span>
@@ -1190,10 +1323,15 @@ function MultiSphereSimulation() {
                       <div className="cr">
                         <input type="range" min={min} max={max} step={step} value={val} className={cls}
                           onChange={e=>set(parseFloat(e.target.value))}
-                          onTouchEnd={e=>e.target.blur()}
+                          onMouseUp={()=>onRelease&&onRelease()}
+                          onKeyDown={e=>{ if(e.key==='ArrowLeft'||e.key==='ArrowRight') e.stopPropagation(); }}
+                          onKeyUp={e=>{ if(e.key==='ArrowLeft'||e.key==='ArrowRight') { onRelease&&onRelease(); } }}
+                          onTouchEnd={e=>{ e.target.blur(); onRelease&&onRelease(); }}
                           style={{flex:1}} />
                         <input type="number" min={min} max={max} step={step} value={val}
-                          onChange={e=>set(parseFloat(e.target.value)||min)} style={{width:'52px'}} />
+                          onChange={e=>set(parseFloat(e.target.value)||min)}
+                          onBlur={()=>onRelease&&onRelease()}
+                          style={{width:'52px'}} />
                       </div>
                       <div className="cv" style={{color}}>{typeof val==='number'?val.toFixed(toFixed):val}{unit}</div>
                     </div>
