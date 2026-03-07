@@ -76,6 +76,8 @@ function MultiSphereSimulation() {
   const [draftHollowSph, setDraftHollowSph] = useState(0.5);
   const [draftHollowCyl, setDraftHollowCyl] = useState(0.5);
   const [isAdjusting,    setIsAdjusting]    = useState(false);
+  // 開啟參數面板時的快照，用來判斷關閉時是否有修改
+  const paramSnapshotRef = useRef(null);
 
   const [playing, setPlaying] = useState(false);
   const [displaySpeed, setDisplaySpeed] = useState(1);
@@ -258,9 +260,13 @@ function MultiSphereSimulation() {
     return ()=>{if(rafRef.current) cancelAnimationFrame(rafRef.current);};
   },[playing]);
 
+  const secParamsRef = useRef(false);
+  useEffect(()=>{ secParamsRef.current = secParams; },[secParams]);
+
   useEffect(()=>{
     const onKey=(e)=>{
       if(e.target.tagName==='INPUT') return;
+      if(secParamsRef.current) return; // 參數面板開啟時不觸發播放快捷鍵
       if(e.key===' '||e.code==='Space'){
         e.preventDefault();
         setPlaying(p=>{playingRef.current=!p;return !p;});
@@ -650,6 +656,7 @@ function MultiSphereSimulation() {
           cam.position.z += (8 - cam.position.z) * 0.05;
 
           cam.lookAt(cam.position.x, targetLookY, 0);
+          cam.far = Math.max(1000, cam.position.z * 3);
           cam.updateProjectionMatrix();
 
           // NDC 邊界修正：X 超出 → 拉遠 Z，Y 超出 → 調整 Y，最多迭代 6 次
@@ -678,6 +685,7 @@ function MultiSphereSimulation() {
             if(yOverBot > 0.001) cam.position.y -= yOverBot * halfH;
 
             cam.lookAt(cam.position.x, targetLookY, 0);
+            cam.far = Math.max(1000, cam.position.z * 3);
             cam.updateProjectionMatrix();
           }
         }
@@ -961,7 +969,7 @@ function MultiSphereSimulation() {
     },
     draftIsUphill
       ? {label:'初速 V', cls:'sh', min:0.1, max:30, step:0.1, val:draftInitSpd, set:(v)=>{setDraftInitSpd(v);setLiveInitSpeed(v);resetOnParamChange();}, unit:' m/s', color:'#ffaa44', toFixed:1}
-      : {label:'斜面高度 H', cls:'sh', min:1, max:30, step:0.5, val:draftHeight, set:(v)=>{setDraftHeight(v);setLiveHeight(v);resetOnParamChange();}, unit:' m', color:'#64c864', toFixed:1},
+      : {label:'斜面高度 H', cls:'sh', min:1, max:30, step:0.1, val:draftHeight, set:(v)=>{setDraftHeight(v);setLiveHeight(v);resetOnParamChange();}, unit:' m', color:'#64c864', toFixed:1},
     {label:'空心球壁厚 x', cls:'ss', min:0.01, max:0.99, step:0.01, val:draftHollowSph, set:(v)=>{setDraftHollowSph(v);setLiveHollowSph(v);resetOnParamChange();}, unit:'', color:'#ff8888', toFixed:2},
     {label:'空心柱壁厚 x', cls:'sc', min:0.01, max:0.99, step:0.01, val:draftHollowCyl, set:(v)=>{setDraftHollowCyl(v);setLiveHollowCyl(v);resetOnParamChange();}, unit:'', color:'#8888ff', toFixed:2},
   ];
@@ -1058,38 +1066,37 @@ function MultiSphereSimulation() {
           </div>
 
           <div onPointerDown={pd(()=>setSecPanel(p=>{ if(p){ if(secParams){ 
+            const snap = paramSnapshotRef.current;
+            const changed = !snap ||
+              snap.angle !== draftAngle || snap.height !== draftHeight ||
+              snap.initSpd !== draftInitSpd || snap.hollowSph !== draftHollowSph ||
+              snap.hollowCyl !== draftHollowCyl;
             const ang = draftAngle===0?(draftAngle>0?1:-1):draftAngle;
-            setLiveAngle(ang);
-            setLiveHeight(draftHeight);
-            setLiveInitSpeed(draftInitSpd);
-            setLiveHollowSph(draftHollowSph);
-            setLiveHollowCyl(draftHollowCyl);
-            setCommittedAngle(ang);
-            setCommittedHeight(draftHeight);
-            setCommittedInitSpd(draftInitSpd);
-            setCommittedHollowSph(draftHollowSph);
-            setCommittedHollowCyl(draftHollowCyl);
-            setPlaying(false);
-            setTime(0);
-            setDisplaySpeed(1);
-            speedRef.current=1;
-            speedIdxRef.current=7;
-            if(rankingLabelRef.current){
-              while(rankingLabelRef.current.children.length>0){
-                rankingLabelRef.current.remove(rankingLabelRef.current.children[0]);
+            setLiveAngle(ang); setLiveHeight(draftHeight); setLiveInitSpeed(draftInitSpd);
+            setLiveHollowSph(draftHollowSph); setLiveHollowCyl(draftHollowCyl);
+            if(changed){
+              setCommittedAngle(ang); setCommittedHeight(draftHeight);
+              setCommittedInitSpd(draftInitSpd); setCommittedHollowSph(draftHollowSph);
+              setCommittedHollowCyl(draftHollowCyl);
+              setPlaying(false); setTime(0); setDisplaySpeed(1);
+              speedRef.current=1; speedIdxRef.current=7;
+              if(rankingLabelRef.current){
+                while(rankingLabelRef.current.children.length>0)
+                  rankingLabelRef.current.remove(rankingLabelRef.current.children[0]);
               }
-            }
-            if(trailRef.current){
-              while(trailRef.current.children.length>0){
-                const child = trailRef.current.children[0];
-                if(child.geometry) child.geometry.dispose();
-                if(child.material) child.material.dispose();
-                trailRef.current.remove(child);
+              if(trailRef.current){
+                while(trailRef.current.children.length>0){
+                  const child = trailRef.current.children[0];
+                  if(child.geometry) child.geometry.dispose();
+                  if(child.material) child.material.dispose();
+                  trailRef.current.remove(child);
+                }
               }
+              const mkC = () => ({ allPts:[], allTs:[], lastT:-1, chunkStart:0, completedMeshes:[], currentMesh:null, prevTEnd:-1, wasReverse:false });
+              trailCacheRef.current = { solid:mkC(), hollow:mkC(), cylinder:mkC(), hollowCyl:mkC() };
             }
-            const mkC = () => ({ allPts:[], allTs:[], lastT:-1, chunkStart:0, completedMeshes:[], currentMesh:null, prevTEnd:-1, wasReverse:false });
-            trailCacheRef.current = { solid:mkC(), hollow:mkC(), cylinder:mkC(), hollowCyl:mkC() };
-            setIsAdjusting(false); 
+            setIsAdjusting(false);
+            paramSnapshotRef.current = null;
           } setSecParams(false);setSecData(false);setSecFormula(false);}else{if(scrollRef.current)scrollRef.current.scrollTop=0;}return !p; }))}
             style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'9px 14px',borderRadius:'9px',cursor:'pointer',background:secPanel?'linear-gradient(90deg,rgba(0,255,136,0.10) 0%,rgba(100,150,255,0.08) 100%)':'rgba(255,255,255,0.04)',border:`1px solid ${secPanel?'rgba(0,255,136,0.35)':'rgba(255,255,255,0.1)'}`,transition:'all 0.25s ease',userSelect:'none',WebkitTapHighlightColor:'transparent',touchAction:'manipulation'}}>
             <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:'3px',textAlign:'center'}}>
@@ -1106,39 +1113,56 @@ function MultiSphereSimulation() {
             <div style={{marginBottom:'10px'}}>
               <SectionHeader title="參數控制" open={secParams} onToggle={()=>{
                 if(secParams){
-                  const ang = draftAngle===0?(draftAngle>0?1:-1):draftAngle;
+                  // 關閉面板：比對快照，只有修改過才重置
+                  const snap = paramSnapshotRef.current;
+                  const changed = !snap ||
+                    snap.angle !== draftAngle ||
+                    snap.height !== draftHeight ||
+                    snap.initSpd !== draftInitSpd ||
+                    snap.hollowSph !== draftHollowSph ||
+                    snap.hollowCyl !== draftHollowCyl;
+
+                  const ang = draftAngle === 0 ? (draftAngle > 0 ? 1 : -1) : draftAngle;
                   setLiveAngle(ang);
                   setLiveHeight(draftHeight);
                   setLiveInitSpeed(draftInitSpd);
                   setLiveHollowSph(draftHollowSph);
                   setLiveHollowCyl(draftHollowCyl);
-                  setCommittedAngle(ang);
-                  setCommittedHeight(draftHeight);
-                  setCommittedInitSpd(draftInitSpd);
-                  setCommittedHollowSph(draftHollowSph);
-                  setCommittedHollowCyl(draftHollowCyl);
-                  setPlaying(false);
-                  setTime(0);
-                  setDisplaySpeed(1);
-                  speedRef.current=1;
-                  speedIdxRef.current=7;
-                  if(rankingLabelRef.current){
-                    while(rankingLabelRef.current.children.length>0){
-                      rankingLabelRef.current.remove(rankingLabelRef.current.children[0]);
+
+                  if(changed){
+                    setCommittedAngle(ang);
+                    setCommittedHeight(draftHeight);
+                    setCommittedInitSpd(draftInitSpd);
+                    setCommittedHollowSph(draftHollowSph);
+                    setCommittedHollowCyl(draftHollowCyl);
+                    setPlaying(false);
+                    setTime(0);
+                    setDisplaySpeed(1);
+                    speedRef.current=1;
+                    speedIdxRef.current=7;
+                    if(rankingLabelRef.current){
+                      while(rankingLabelRef.current.children.length>0)
+                        rankingLabelRef.current.remove(rankingLabelRef.current.children[0]);
                     }
-                  }
-                  if(trailRef.current){
-                    while(trailRef.current.children.length>0){
-                      const child = trailRef.current.children[0];
-                      if(child.geometry) child.geometry.dispose();
-                      if(child.material) child.material.dispose();
-                      trailRef.current.remove(child);
+                    if(trailRef.current){
+                      while(trailRef.current.children.length>0){
+                        const child = trailRef.current.children[0];
+                        if(child.geometry) child.geometry.dispose();
+                        if(child.material) child.material.dispose();
+                        trailRef.current.remove(child);
+                      }
                     }
+                    const mkC = () => ({ allPts:[], allTs:[], lastT:-1, chunkStart:0, completedMeshes:[], currentMesh:null, prevTEnd:-1, wasReverse:false });
+                    trailCacheRef.current = { solid:mkC(), hollow:mkC(), cylinder:mkC(), hollowCyl:mkC() };
                   }
-                  const mkC = () => ({ allPts:[], allTs:[], lastT:-1, chunkStart:0, completedMeshes:[], currentMesh:null, prevTEnd:-1, wasReverse:false });
-                  trailCacheRef.current = { solid:mkC(), hollow:mkC(), cylinder:mkC(), hollowCyl:mkC() };
                   setIsAdjusting(false);
+                  paramSnapshotRef.current = null;
                 } else {
+                  // 開啟面板：記錄快照
+                  paramSnapshotRef.current = {
+                    angle: liveAngle, height: liveHeight, initSpd: liveInitSpeed,
+                    hollowSph: liveHollowSph, hollowCyl: liveHollowCyl
+                  };
                   setDraftAngle(liveAngle);
                   setDraftHeight(liveHeight);
                   setDraftInitSpd(liveInitSpeed);
@@ -1166,7 +1190,7 @@ function MultiSphereSimulation() {
                       <div className="cr">
                         <input type="range" min={min} max={max} step={step} value={val} className={cls}
                           onChange={e=>set(parseFloat(e.target.value))}
-                          onMouseUp={e=>e.target.blur()} onTouchEnd={e=>e.target.blur()}
+                          onTouchEnd={e=>e.target.blur()}
                           style={{flex:1}} />
                         <input type="number" min={min} max={max} step={step} value={val}
                           onChange={e=>set(parseFloat(e.target.value)||min)} style={{width:'52px'}} />
