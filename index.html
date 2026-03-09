@@ -90,6 +90,7 @@ function MultiSphereSimulation() {
   const speedRef     = useRef(1);
   const playingRef   = useRef(false);
   const speedIdxRef  = useRef(7);
+  const phyRef       = useRef({}); // 物理參數 ref，供 animate loop 直接讀取
   const SPEEDS = [-8, -4, -2, -1, -0.5, -0.25, 0.25, 0.5, 1, 2, 4, 8];
 
   const [secPanel,   setSecPanel]   = useState(false);
@@ -142,6 +143,14 @@ function MultiSphereSimulation() {
 
   useEffect(()=>{ sliderMaxRef.current=sliderMax; },[sliderMax]);
   useEffect(()=>{ playingRef.current=playing; },[playing]);
+
+  // 每次 render 同步物理參數到 ref，供 animate loop 直接讀取（不觸發 re-render）
+  phyRef.current = {
+    isUphill, theta, liveHeight,
+    I_solid, I_hollowSphere, I_cylinder, I_hollowCylinder,
+    maxTime_solid, maxTime_hollowSphere, maxTime_cylinder, maxTime_hollowCylinder,
+    calcY_up, calcY_down, calcK, calcStopTime,
+  };
 
   const getObjectPosition = (t,I,z) => {
     const cosT=Math.cos(theta), sinT=Math.sin(theta);
@@ -346,9 +355,9 @@ function MultiSphereSimulation() {
       const L=(ca,cb)=>Math.round(ca+(cb-ca)*t);
       return '#'+[L((ai>>16)&0xff,(bi>>16)&0xff),L((ai>>8)&0xff,(bi>>8)&0xff),L(ai&0xff,bi&0xff)].map(v=>v.toString(16).padStart(2,'0')).join('');
     };
-    const hT=(liveHollowSph)*0.85; // 中空比直接對應顏色深淺
+    const hT = ((liveHollowSph - 0.01) / 0.98) * 0.85;
     const solidSphereTex=mkStripes('#ff5533','#880011');
-    const hollowSphereTex=mkStripes(lerpHex('#ffccbb','#ff5533',hT),lerpHex('#cc8877','#880011',hT));
+    const hollowSphereTex=mkStripes(lerpHex('#ff5533','#ffccbb',hT),lerpHex('#880011','#cc8877',hT));
     const solidCylTex=mkStripes('#2244dd','#001177');
     const hollowCylTex=mkStripes('#2244dd','#001177');
 
