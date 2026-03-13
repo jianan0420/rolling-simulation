@@ -54,7 +54,9 @@ function MultiSphereSimulation() {
   const markerDirRef      = useRef(['up','left','right','down']);
   const markerCooldownRef = useRef([0, 0, 0, 0]);
   const markerSpritesRef  = useRef([]); // 存現有 sprites，animate loop 每幀只更新位置
-  const targetCamZRef     = useRef(8); // 換方向後的冷卻幀數
+  const targetCamZRef     = useRef(8);
+  const stoppedRef        = useRef([false,false,false,false]); // [solid,hollow,cyl,hollowCyl]
+  const markerRanksRef    = useRef([null,null,null,null]);     // 上一幀 ranks，用於 dirty check // 換方向後的冷卻幀數
   if (!trailCacheRef.current) {
     trailCacheRef.current = { solid:mkCache(), hollow:mkCache(), cylinder:mkCache(), hollowCyl:mkCache() };
   }
@@ -506,38 +508,199 @@ function MultiSphereSimulation() {
     };
     const updateMarkers = () => {
       const cam = cameraRef.current;
-      const sprites = markerSpritesRef.current;
-      if(!cam || !sprites.length) return;
+      if(!cam || !markersRef.current) return;
       const meshes = [sphereRef,hollowSphereRef,cylinderRef,hollowCylinderRef]
         .map(r=>r.current).filter(Boolean);
       if(meshes.length !== 4) return;
-      const camDir = new THREE.Vector3(); cam.getWorldDirection(camDir);
+
+      const MARKER_NAMES     = ['實心球','空心球','實心柱','空心柱'];
+      const MARKER_COLORS_BG = ['#aa1a00','#bb3311','#0d1eaa','#1f2fbb'];
+      const MARKER_COLORS_BD = ['#ff6644','#ff9977','#5577ff','#7799ff'];
+      const TARGET_NDC_H = 0.20;
+      const DIRS = ['up','down','left','right'];
+
+      const camDir   = new THREE.Vector3(); cam.getWorldDirection(camDir);
       const camRight = new THREE.Vector3(1,0,0).applyQuaternion(cam.quaternion);
       const camUp    = new THREE.Vector3(0,1,0).applyQuaternion(cam.quaternion);
-      const TARGET_NDC_H = 0.20;
-      meshes.forEach((mesh, idx) => {
-        const entry = sprites[idx]; if(!entry) return;
-        const { sp, dir } = entry;
-        const ndcMesh = mesh.position.clone().project(cam);
-        const ndcTop  = ndcMesh.clone(); ndcTop.y += TARGET_NDC_H;
-        const worldMesh = ndcMesh.clone().unproject(cam);
-        const worldTop  = ndcTop.clone().unproject(cam);
-        const depth = mesh.position.clone().sub(cam.position).dot(camDir);
-        const dirM  = worldMesh.clone().sub(cam.position).normalize();
-        const dirT  = worldTop.clone().sub(cam.position).normalize();
-        const pM    = cam.position.clone().addScaledVector(dirM, depth / dirM.dot(camDir));
-        const pT    = cam.position.clone().addScaledVector(dirT, depth / dirT.dot(camDir));
-        const spriteH = pM.distanceTo(pT);
-        const spriteW = spriteH * (340/200);
-        const tipW = spriteW * 0.471, tipH = spriteH * 0.45;
+
+      // ── 計算每個物體在某方向的 spriteH/W/tipW/tipH/center ──
+      const getSpriteInfo = (mesh, dir) => {
+        const ndcM = mesh.position.clone().project(cam);
+        const ndcT = ndcM.clone(); ndcT.y += TARGET_NDC_H;
+        const wM   = ndcM.clone().unproject(cam);
+        const wT   = ndcT.clone().unproject(cam);
+        const dep  = mesh.position.clone().sub(cam.position).dot(camDir);
+        const dM   = wM.clone().sub(cam.position).normalize();
+        const dT   = wT.clone().sub(cam.position).normalize();
+        const pM   = cam.position.clone().addScaledVector(dM, dep / dM.dot(camDir));
+        const pT   = cam.position.clone().addScaledVector(dT, dep / dT.dot(camDir));
+        const sH   = pM.distanceTo(pT);
+        const sW   = sH * (340/200);
+        const tipW = sW * 0.471, tipH = sH * 0.45;
         let center;
         if(dir==='left')       center = mesh.position.clone().addScaledVector(camRight,-r).addScaledVector(camRight,-tipW);
         else if(dir==='right') center = mesh.position.clone().addScaledVector(camRight, r).addScaledVector(camRight, tipW);
         else if(dir==='up')    center = mesh.position.clone().addScaledVector(camUp,    r).addScaledVector(camUp,    tipH);
         else                   center = mesh.position.clone().addScaledVector(camUp,   -r).addScaledVector(camUp,   -tipH);
-        sp.position.copy(center);
-        sp.scale.set(spriteW, spriteH, 1);
+        const cNDC = center.clone().project(cam);
+        const ndcHh = TARGET_NDC_H/2, ndcHw = ndcHh*(340/200)/cam.aspect;
+        return { sH, sW, tipW, tipH, center,
+                 bbox:{ x0:cNDC.x-ndcHw, y0:cNDC.y-ndcHh, x1:cNDC.x+ndcHw, y1:cNDC.y+ndcHh } };
+      };
+
+      const overlap = (a,b) => {
+        const ox = Math.max(0, Math.min(a.x1,b.x1)-Math.max(a.x0,b.x0));
+        const oy = Math.max(0, Math.min(a.y1,b.y1)-Math.max(a.y0,b.y0));
+        return ox*oy;
+      };
+      const meshNDC = meshes.map(mesh => {
+        const ndc  = mesh.position.clone().project(cam);
+        const ndcR = mesh.position.clone().addScaledVector(camRight,r).project(cam);
+        const ndcU = mesh.position.clone().addScaledVector(camUp,   r).project(cam);
+        const hrx  = Math.abs(ndcR.x-ndc.x), hry = Math.abs(ndcU.y-ndc.y);
+        return { x0:ndc.x-hrx-0.01, y0:ndc.y-hry-0.01, x1:ndc.x+hrx+0.01, y1:ndc.y+hry+0.01 };
       });
+      const hasCollision = (bbox, lbs, obs) => {
+        for(const lb of lbs) if(overlap(bbox,lb)>1e-6) return true;
+        for(const ob of obs) if(overlap(bbox,ob)>1e-6) return true;
+        return false;
+      };
+
+      // ── 選方向（只在必要時換） ──
+      const prevDirs = markerDirRef.current;
+      const chosenDirs = [], chosenBBoxes = [];
+      meshes.forEach((mesh,idx) => {
+        const otherMeshNDC = meshNDC.filter((_,i)=>i!==idx);
+        const prevDir  = prevDirs[idx];
+        const prevInfo = getSpriteInfo(mesh, prevDir);
+        if(!hasCollision(prevInfo.bbox, chosenBBoxes, otherMeshNDC)){
+          chosenDirs.push(prevDir); chosenBBoxes.push(prevInfo.bbox); return;
+        }
+        const freeDirs = DIRS.filter(d => !hasCollision(getSpriteInfo(mesh,d).bbox, chosenBBoxes, otherMeshNDC));
+        if(freeDirs.length > 0){
+          const chosen = freeDirs.includes(prevDir) ? prevDir : freeDirs[0];
+          chosenDirs.push(chosen); chosenBBoxes.push(getSpriteInfo(mesh,chosen).bbox);
+        } else {
+          let bestDir=prevDir, bestScore=Infinity;
+          for(const d of DIRS){
+            const bbox=getSpriteInfo(mesh,d).bbox;
+            const score=chosenBBoxes.reduce((s,cb)=>s+overlap(bbox,cb),0)+otherMeshNDC.reduce((s,ob)=>s+overlap(bbox,ob),0);
+            if(score<bestScore){bestScore=score;bestDir=d;}
+          }
+          chosenDirs.push(bestDir); chosenBBoxes.push(getSpriteInfo(mesh,bestDir).bbox);
+        }
+      });
+      markerDirRef.current = chosenDirs;
+
+      // ── 計算當前 RANKS ──
+      const [s0,s1,s2,s3] = stoppedRef.current;
+      const getRank = (objName, stopped) => {
+        const t = timeRef.current;
+        const phy = phyRef.current;
+        if(!phy.theta) return null;
+        const {isUphill,calcStopTime,maxTime_solid,maxTime_hollowSphere,maxTime_cylinder,maxTime_hollowCylinder,
+               I_solid,I_hollowSphere,I_cylinder,I_hollowCylinder,calcY_up,calcY_down,liveHeight} = phy;
+        const getY = (I,maxT) => {
+          const tc = Math.min(t,maxT);
+          return isUphill ? calcY_up(tc,I) : Math.min(calcY_down(tc,I),liveHeight);
+        };
+        const all = [
+          {name:'solid',     Y:getY(I_solid,maxTime_solid),           stopped:s0},
+          {name:'hollow',    Y:getY(I_hollowSphere,maxTime_hollowSphere), stopped:s1},
+          {name:'cylinder',  Y:getY(I_cylinder,maxTime_cylinder),     stopped:s2},
+          {name:'hollowCyl', Y:getY(I_hollowCylinder,maxTime_hollowCylinder),stopped:s3},
+        ];
+        if(isUphill){
+          const stoppedObjs = all.filter(o=>o.stopped).sort((a,b)=>b.Y-a.Y);
+          const idx = stoppedObjs.findIndex(o=>o.name===objName);
+          return stopped && idx>=0 ? idx+1 : null;
+        } else {
+          const arrivedObjs = all.filter(o=>o.stopped).sort((a,b)=>a.Y-b.Y);
+          const idx = arrivedObjs.findIndex(o=>o.name===objName);
+          return stopped && idx>=0 ? idx+1 : null;
+        }
+      };
+      const RANKS = [
+        getRank('solid',    s0),
+        getRank('hollow',   s1),
+        getRank('cylinder', s2),
+        getRank('hollowCyl',s3),
+      ];
+
+      // ── dirty check：只有 dir 或 rank 改變才重建 texture ──
+      const prevRanks = markerRanksRef.current;
+      const dirChanged   = chosenDirs.some((d,i) => d !== (markerSpritesRef.current[i]?.dir));
+      const rankChanged  = RANKS.some((rk,i) => rk !== prevRanks[i]);
+      const needRebuild  = dirChanged || rankChanged || markerSpritesRef.current.length !== 4;
+
+      if(needRebuild){
+        markerRanksRef.current = RANKS;
+        // 清舊 sprites
+        while(markersRef.current.children.length>0)
+          markersRef.current.remove(markersRef.current.children[0]);
+
+        const makeMarkerTex = (idx, rank, dir) => {
+          const cv = document.createElement('canvas');
+          cv.width=340; cv.height=200;
+          const ctx=cv.getContext('2d');
+          const isLeft=dir==='left', isRight=dir==='right', isUp=dir==='up', isDown=dir==='down';
+          const bg=MARKER_COLORS_BG[idx], bdr=MARKER_COLORS_BD[idx];
+          const bx=(isUp||isDown)?30:(isLeft?10:50), by=isDown?50:10;
+          const bw=280, bh=(isUp||isDown)?140:180, br2=28;
+          ctx.fillStyle=bg; ctx.beginPath();
+          ctx.moveTo(bx+br2,by); ctx.lineTo(bx+bw-br2,by); ctx.quadraticCurveTo(bx+bw,by,bx+bw,by+br2);
+          ctx.lineTo(bx+bw,by+bh-br2); ctx.quadraticCurveTo(bx+bw,by+bh,bx+bw-br2,by+bh);
+          ctx.lineTo(bx+br2,by+bh); ctx.quadraticCurveTo(bx,by+bh,bx,by+bh-br2);
+          ctx.lineTo(bx,by+br2); ctx.quadraticCurveTo(bx,by,bx+br2,by);
+          ctx.closePath(); ctx.fill();
+          ctx.fillStyle=bg; ctx.beginPath();
+          if(isLeft)  {ctx.moveTo(bx+bw,by+bh/2-22);ctx.lineTo(bx+bw+40,by+bh/2);ctx.lineTo(bx+bw,by+bh/2+22);}
+          if(isRight) {ctx.moveTo(bx,by+bh/2-22);   ctx.lineTo(bx-40,by+bh/2);   ctx.lineTo(bx,by+bh/2+22);}
+          if(isUp)    {ctx.moveTo(bx+bw/2-22,by+bh);ctx.lineTo(bx+bw/2,190);     ctx.lineTo(bx+bw/2+22,by+bh);}
+          if(isDown)  {ctx.moveTo(bx+bw/2-22,by);   ctx.lineTo(bx+bw/2,10);      ctx.lineTo(bx+bw/2+22,by);}
+          ctx.closePath(); ctx.fill();
+          ctx.strokeStyle=bdr; ctx.lineWidth=5; ctx.beginPath();
+          ctx.moveTo(bx+br2,by); ctx.lineTo(bx+bw-br2,by); ctx.quadraticCurveTo(bx+bw,by,bx+bw,by+br2);
+          ctx.lineTo(bx+bw,by+bh-br2); ctx.quadraticCurveTo(bx+bw,by+bh,bx+bw-br2,by+bh);
+          ctx.lineTo(bx+br2,by+bh); ctx.quadraticCurveTo(bx,by+bh,bx,by+bh-br2);
+          ctx.lineTo(bx,by+br2); ctx.quadraticCurveTo(bx,by,bx+br2,by);
+          ctx.closePath(); ctx.stroke();
+          const cx=bx+bw/2;
+          if(rank!=null){
+            const rx=(isLeft||isUp||isDown)?bx+44:bx+bw-44, ry=by+44;
+            ctx.fillStyle='#ffdd00'; ctx.beginPath(); ctx.arc(rx,ry,38,0,Math.PI*2); ctx.fill();
+            ctx.fillStyle='#000'; ctx.font='bold 44px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle';
+            ctx.fillText(rank,rx,ry);
+            ctx.fillStyle='#fff'; ctx.font='bold 50px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle';
+            ctx.fillText(MARKER_NAMES[idx],cx,by+bh/2+4);
+          } else {
+            ctx.fillStyle='#fff'; ctx.font='bold 52px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle';
+            ctx.fillText(MARKER_NAMES[idx],cx,by+bh/2);
+          }
+          return new THREE.CanvasTexture(cv);
+        };
+
+        meshes.forEach((mesh,idx) => {
+          const dir  = chosenDirs[idx];
+          const info = getSpriteInfo(mesh, dir);
+          const sp   = new THREE.Sprite(new THREE.SpriteMaterial({
+            map: makeMarkerTex(idx, RANKS[idx], dir), transparent:true, depthTest:false
+          }));
+          sp.scale.set(info.sW, info.sH, 1);
+          sp.position.copy(info.center);
+          sp.renderOrder = 998;
+          markersRef.current.add(sp);
+          markerSpritesRef.current[idx] = { sp, dir };
+        });
+      } else {
+        // 只更新位置和 scale（每幀）
+        meshes.forEach((mesh,idx) => {
+          const entry = markerSpritesRef.current[idx]; if(!entry) return;
+          const info  = getSpriteInfo(mesh, entry.dir);
+          entry.sp.position.copy(info.center);
+          entry.sp.scale.set(info.sW, info.sH, 1);
+        });
+      }
     };
     const animate=(ts)=>{requestAnimationFrame(animate); updateObjects(); updateCamera(ts); updateMarkers(); renderer.render(scene,camera);};
     animate(0);
@@ -555,6 +718,8 @@ function MultiSphereSimulation() {
 
   useEffect(()=>{
     if(!sphereRef.current) return;
+    // 同步 stopped 狀態給 animate loop 用
+    stoppedRef.current = [solidStopped, hollowStopped, cylinderStopped, hollowCylStopped];
     
     if(isUphill && slopeMeshRef.current){
       const sinT=Math.sin(theta), cosT=Math.cos(theta);
@@ -728,274 +893,6 @@ function MultiSphereSimulation() {
       updateTrail('hollowCyl', I_hollowCylinder, maxTime_hollowCylinder, z3, 0xaabbff);
     }
 
-    if(cameraRef.current){
-      const cam=cameraRef.current;
-      const meshes=[sphereRef,hollowSphereRef,cylinderRef,hollowCylinderRef]
-        .map(r=>r.current).filter(Boolean);
-      if(meshes.length===4){
-        while(markersRef.current.children.length > 0) {
-          markersRef.current.remove(markersRef.current.children[0]);
-        }
-
-        {
-          const MARKER_NAMES     = ['實心球','空心球','實心柱','空心柱'];
-          const MARKER_COLORS_BG = ['#aa1a00','#bb3311','#0d1eaa','#1f2fbb'];
-          const MARKER_COLORS_BD = ['#ff6644','#ff9977','#5577ff','#7799ff'];
-
-          // ── 自動標籤方向：在螢幕空間選重疊最少的方向 ──
-          // 先預算各物體的 NDC 中心，以及每個方向的標籤 NDC bbox
-          // 然後依序為每個物體選最佳方向
-
-          const camDir = new THREE.Vector3();
-          cam.getWorldDirection(camDir);
-
-          const TARGET_NDC_H = 0.20;
-          const DIRS = ['up','down','left','right'];
-
-          // 計算某物體在某方向時，標籤的 NDC bbox {x0,y0,x1,y1}
-          const getLabelNDC = (mesh, dir) => {
-            const ndcM = mesh.position.clone().project(cam);
-            const ndcT = ndcM.clone(); ndcT.y += TARGET_NDC_H;
-            const wM   = ndcM.clone().unproject(cam);
-            const wT   = ndcT.clone().unproject(cam);
-            const dep  = mesh.position.clone().sub(cam.position).dot(camDir);
-            const dM   = wM.clone().sub(cam.position).normalize();
-            const dT   = wT.clone().sub(cam.position).normalize();
-            const pM2  = cam.position.clone().addScaledVector(dM, dep / dM.dot(camDir));
-            const pT2  = cam.position.clone().addScaledVector(dT, dep / dT.dot(camDir));
-            const sH   = pM2.distanceTo(pT2);
-            const sW   = sH * (340/200);
-            const camRight2 = new THREE.Vector3(1,0,0).applyQuaternion(cam.quaternion);
-            const camUp2    = new THREE.Vector3(0,1,0).applyQuaternion(cam.quaternion);
-            const tipW2 = sW * 0.471, tipH2 = sH * 0.45;
-            let center;
-            if(dir==='left')       center = mesh.position.clone().addScaledVector(camRight2,-r).addScaledVector(camRight2,-tipW2);
-            else if(dir==='right') center = mesh.position.clone().addScaledVector(camRight2, r).addScaledVector(camRight2, tipW2);
-            else if(dir==='up')    center = mesh.position.clone().addScaledVector(camUp2,    r).addScaledVector(camUp2,    tipH2);
-            else                   center = mesh.position.clone().addScaledVector(camUp2,   -r).addScaledVector(camUp2,   -tipH2);
-            const cNDC = center.clone().project(cam);
-            // NDC 半高 = TARGET_NDC_H/2，NDC 半寬 = 半高 * (340/200) / aspect
-            const ndcHh = TARGET_NDC_H / 2;
-            const ndcHw = ndcHh * (340/200) / cam.aspect;
-            return { x0:cNDC.x-ndcHw, y0:cNDC.y-ndcHh, x1:cNDC.x+ndcHw, y1:cNDC.y+ndcHh, cx:cNDC.x, cy:cNDC.y, sW, sH, camRight2, camUp2, tipW2, tipH2 };
-          };
-
-          // 計算兩個 bbox 的重疊面積
-          const overlap = (a, b) => {
-            const ox = Math.max(0, Math.min(a.x1,b.x1) - Math.max(a.x0,b.x0));
-            const oy = Math.max(0, Math.min(a.y1,b.y1) - Math.max(a.y0,b.y0));
-            return ox * oy;
-          };
-
-          // 物體自身的 NDC bbox：直接投影上/右邊緣，精確計算 NDC 半徑
-          const meshNDC = meshes.map(mesh => {
-            const ndc  = mesh.position.clone().project(cam);
-            const camR = new THREE.Vector3(1,0,0).applyQuaternion(cam.quaternion);
-            const camU = new THREE.Vector3(0,1,0).applyQuaternion(cam.quaternion);
-            const ndcR = mesh.position.clone().addScaledVector(camR, r).project(cam);
-            const ndcU = mesh.position.clone().addScaledVector(camU, r).project(cam);
-            const hrx  = Math.abs(ndcR.x - ndc.x);
-            const hry  = Math.abs(ndcU.y - ndc.y);
-            // 加一點 padding 避免剛好邊緣貼著
-            return { x0:ndc.x-hrx-0.01, y0:ndc.y-hry-0.01, x1:ndc.x+hrx+0.01, y1:ndc.y+hry+0.01 };
-          });
-
-          const hasCollision = (bbox, labelBBoxes, objBBoxes) => {
-            for(const lb of labelBBoxes) { if(overlap(bbox, lb) > 1e-6) return true; }
-            for(const ob of objBBoxes)   { if(overlap(bbox, ob) > 1e-6) return true; }
-            return false;
-          };
-
-          // 依序選方向：無碰撞就完全不動；有碰撞就找無碰撞的方向；
-          // 若四個方向都有碰撞，選最小碰撞的並鎖定（不再換）
-          const prevDirs   = markerDirRef.current;
-          const chosenDirs = [];
-          const chosenBBoxes = [];
-
-          meshes.forEach((mesh, idx) => {
-            const prevDir  = prevDirs[idx];
-            const prevBBox = getLabelNDC(mesh, prevDir);
-            // 排除自己的物體，只檢查其他三個
-            const otherMeshNDC = meshNDC.filter((_,i) => i !== idx);
-
-            // 無碰撞 → 完全不換
-            if(!hasCollision(prevBBox, chosenBBoxes, otherMeshNDC)) {
-              chosenDirs.push(prevDir);
-              chosenBBoxes.push(prevBBox);
-              return;
-            }
-
-            // 有碰撞 → 先找有無完全無碰撞的方向
-            const freeDirs = DIRS.filter(dir => {
-              const bbox = getLabelNDC(mesh, dir);
-              return !hasCollision(bbox, chosenBBoxes, otherMeshNDC);
-            });
-
-            if(freeDirs.length > 0) {
-              const chosen = freeDirs.includes(prevDir) ? prevDir : freeDirs[0];
-              chosenDirs.push(chosen);
-              chosenBBoxes.push(getLabelNDC(mesh, chosen));
-            } else {
-              // 四個方向都有碰撞 → 選最小重疊面積的
-              let bestDir = prevDir, bestScore = Infinity;
-              for(const dir of DIRS) {
-                const bbox = getLabelNDC(mesh, dir);
-                const score =
-                  chosenBBoxes.reduce((s,cb) => s + overlap(bbox,cb), 0) +
-                  otherMeshNDC.reduce((s,ob) => s + overlap(bbox,ob), 0);
-                if(score < bestScore) { bestScore = score; bestDir = dir; }
-              }
-              chosenDirs.push(bestDir);
-              chosenBBoxes.push(getLabelNDC(mesh, bestDir));
-            }
-          });
-
-          markerDirRef.current = chosenDirs;
-          const MARKER_DIR = chosenDirs;
-
-          const RANKS = [
-            getRealTimeRank('solid',     solidStopped),
-            getRealTimeRank('hollow',    hollowStopped),
-            getRealTimeRank('cylinder',  cylinderStopped),
-            getRealTimeRank('hollowCyl', hollowCylStopped),
-          ];
-
-          const makeMarkerTex = (idx, rank, dir) => {
-            const cv = document.createElement('canvas');
-            cv.width = 340; cv.height = 200;
-            const ctx = cv.getContext('2d');
-            const isLeft  = dir === 'left';
-            const isRight = dir === 'right';
-            const isUp    = dir === 'up';
-            const isDown  = dir === 'down';
-            const bg  = MARKER_COLORS_BG[idx];
-            const bdr = MARKER_COLORS_BD[idx];
-
-            const bx = (isUp||isDown) ? 30 : (isLeft ? 10 : 50);
-            const by = isDown ? 50 : 10;
-            const bw = 280, bh = (isUp||isDown) ? 140 : 180, br2 = 28;
-
-            // 圓角矩形
-            ctx.fillStyle = bg;
-            ctx.beginPath();
-            ctx.moveTo(bx+br2,by); ctx.lineTo(bx+bw-br2,by); ctx.quadraticCurveTo(bx+bw,by,bx+bw,by+br2);
-            ctx.lineTo(bx+bw,by+bh-br2); ctx.quadraticCurveTo(bx+bw,by+bh,bx+bw-br2,by+bh);
-            ctx.lineTo(bx+br2,by+bh); ctx.quadraticCurveTo(bx,by+bh,bx,by+bh-br2);
-            ctx.lineTo(bx,by+br2); ctx.quadraticCurveTo(bx,by,bx+br2,by);
-            ctx.closePath(); ctx.fill();
-
-            // 三角指針
-            ctx.fillStyle = bg;
-            ctx.beginPath();
-            if(isLeft)  { ctx.moveTo(bx+bw,by+bh/2-22); ctx.lineTo(bx+bw+40,by+bh/2); ctx.lineTo(bx+bw,by+bh/2+22); }
-            if(isRight) { ctx.moveTo(bx,by+bh/2-22);    ctx.lineTo(bx-40,by+bh/2);    ctx.lineTo(bx,by+bh/2+22); }
-            if(isUp)    { ctx.moveTo(bx+bw/2-22,by+bh); ctx.lineTo(bx+bw/2,190);      ctx.lineTo(bx+bw/2+22,by+bh); }
-            if(isDown)  { ctx.moveTo(bx+bw/2-22,by);    ctx.lineTo(bx+bw/2,10);       ctx.lineTo(bx+bw/2+22,by); }
-            ctx.closePath(); ctx.fill();
-
-            // 邊框
-            ctx.strokeStyle = bdr; ctx.lineWidth = 5;
-            ctx.beginPath();
-            ctx.moveTo(bx+br2,by); ctx.lineTo(bx+bw-br2,by); ctx.quadraticCurveTo(bx+bw,by,bx+bw,by+br2);
-            ctx.lineTo(bx+bw,by+bh-br2); ctx.quadraticCurveTo(bx+bw,by+bh,bx+bw-br2,by+bh);
-            ctx.lineTo(bx+br2,by+bh); ctx.quadraticCurveTo(bx,by+bh,bx,by+bh-br2);
-            ctx.lineTo(bx,by+br2); ctx.quadraticCurveTo(bx,by,bx+br2,by);
-            ctx.closePath(); ctx.stroke();
-
-            // 文字
-            const cx = bx+bw/2;
-            if(rank != null) {
-              const rx = (isLeft||isUp||isDown) ? bx+44 : bx+bw-44;
-              const ry = by+44;
-              ctx.fillStyle='#ffdd00'; ctx.beginPath(); ctx.arc(rx,ry,38,0,Math.PI*2); ctx.fill();
-              ctx.fillStyle='#000'; ctx.font='bold 44px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle';
-              ctx.fillText(rank,rx,ry);
-              ctx.fillStyle='#fff'; ctx.font='bold 50px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle';
-              ctx.fillText(MARKER_NAMES[idx],cx,by+bh/2+4);
-            } else {
-              ctx.fillStyle='#fff'; ctx.font='bold 52px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle';
-              ctx.fillText(MARKER_NAMES[idx],cx,by+bh/2);
-            }
-            return new THREE.CanvasTexture(cv);
-          };
-
-          // 預先計算：把一個固定 NDC 高度反投影回世界單位，得到固定螢幕大小的 spriteH
-          // 對每個物體用自己的 depth 做計算
-          meshes.forEach((mesh, idx) => {
-            const dir = MARKER_DIR[idx];
-
-            // ── scale：NDC 反投影法，100% 保證螢幕大小固定 ──
-            // 取物體的 NDC 座標，往上偏移 TARGET_NDC_H，反投影回世界座標，
-            // 兩點世界距離就是對應的 spriteH
-            const ndcMesh = mesh.position.clone().project(cam);
-            const ndcTop  = ndcMesh.clone(); ndcTop.y += TARGET_NDC_H;
-            // 反投影時保持相同的 NDC z（相同深度平面）
-            const worldMesh = ndcMesh.clone().unproject(cam);
-            const worldTop  = ndcTop.clone().unproject(cam);
-            // unproject 出來的是射線方向，需要在物體的深度平面上取點
-            // 用 view-plane depth 修正
-            const depth = mesh.position.clone().sub(cam.position).dot(camDir);
-            const dirM  = worldMesh.clone().sub(cam.position).normalize();
-            const dirT  = worldTop.clone().sub(cam.position).normalize();
-            const pM    = cam.position.clone().addScaledVector(dirM, depth / dirM.dot(camDir));
-            const pT    = cam.position.clone().addScaledVector(dirT, depth / dirT.dot(camDir));
-            const spriteH = pM.distanceTo(pT);
-            const spriteW = spriteH * (340 / 200);
-
-            // ── 指針尖端在 canvas 中的比例 ──
-            // left/right: 尖端距 sprite 中心 X = 0.471 * spriteW
-            // up/down:    尖端距 sprite 中心 Y = 0.45 * spriteH  (canvas Y=190或10，中心=100)
-            const tipW = spriteW * 0.471;
-            const tipH = spriteH * 0.45;
-
-            // ── 物體半徑在當前 depth 下的世界單位（view-plane 上） ──
-            // Sprite 是 billboard，XY 方向對應攝影機平面
-            // 直接用 r 即可（物體半徑是世界單位）
-
-            // ── NDC 偏移：計算 sprite 中心應在的 NDC 位置 ──
-            // 做法：把「指針尖端世界座標」投影到 NDC，再加上 sprite 中心到尖端的 NDC 偏移
-            // 更精確做法：直接在 view space 計算 sprite 中心位置，再轉 world
-            const pMesh = mesh.position.clone().project(cam); // 物體的 NDC
-
-            // 攝影機的 right / up 向量（view-plane 軸）
-            const camRight = new THREE.Vector3(1,0,0).applyQuaternion(cam.quaternion);
-            const camUp    = new THREE.Vector3(0,1,0).applyQuaternion(cam.quaternion);
-
-            // 指針尖端的世界座標 = 物體中心 + 半徑 * 方向 + 0（尖端貼物體表面）
-            // sprite 中心的世界座標 = 尖端位置 + (tipW 或 tipH) * 方向
-            let spriteCenterWorld;
-            if(dir === 'left') {
-              const tipWorld = mesh.position.clone().addScaledVector(camRight, -r);
-              spriteCenterWorld = tipWorld.clone().addScaledVector(camRight, -tipW);
-            } else if(dir === 'right') {
-              const tipWorld = mesh.position.clone().addScaledVector(camRight, r);
-              spriteCenterWorld = tipWorld.clone().addScaledVector(camRight, tipW);
-            } else if(dir === 'up') {
-              // up = 螢幕上方 = camUp 正方向，但世界Z軸在view space的up分量需考慮
-              // 攝影機是看 -Z 方向，世界-Z在螢幕上投影為「上方」
-              // 用 camUp 方向做偏移
-              const tipWorld = mesh.position.clone().addScaledVector(camUp, r);
-              spriteCenterWorld = tipWorld.clone().addScaledVector(camUp, tipH);
-            } else { // down
-              const tipWorld = mesh.position.clone().addScaledVector(camUp, -r);
-              spriteCenterWorld = tipWorld.clone().addScaledVector(camUp, -tipH);
-            }
-
-            const sp = new THREE.Sprite(new THREE.SpriteMaterial({
-              map: makeMarkerTex(idx, RANKS[idx], dir),
-              transparent: true, depthTest: false
-            }));
-            sp.scale.set(spriteW, spriteH, 1);
-            sp.position.copy(spriteCenterWorld);
-            sp.renderOrder = 998;
-            markersRef.current.add(sp);
-            markerSpritesRef.current[idx] = { sp, dir };
-          });
-        }
-
-
-      }
-    }
   },[time,liveAngle,liveHeight,liveInitSpeed,liveHollowSph,liveHollowCyl,solidStopped,hollowStopped,cylinderStopped,hollowCylStopped,allStopped]);
 
   const clearTrail = () => {
@@ -1003,6 +900,7 @@ function MultiSphereSimulation() {
     markerCooldownRef.current = [0, 0, 0, 0];
     markerSpritesRef.current  = [];
     targetCamZRef.current     = 8;
+    markerRanksRef.current    = [null,null,null,null];
     if(trailRef.current){
       while(trailRef.current.children.length>0){
         const child = trailRef.current.children[0];
