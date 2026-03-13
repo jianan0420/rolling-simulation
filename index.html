@@ -52,7 +52,9 @@ function MultiSphereSimulation() {
   // 記錄四個物體上一幀距攝影機的距離，用來等比例縮放標籤
   const prevCamDistRef = useRef([20, 20, 20, 20]);
   const markerDirRef      = useRef(['up','left','right','down']);
-  const markerCooldownRef = useRef([0, 0, 0, 0]); // 換方向後的冷卻幀數
+  const markerCooldownRef = useRef([0, 0, 0, 0]);
+  const markerSpritesRef  = useRef([]); // 存現有 sprites，animate loop 每幀只更新位置
+  const targetCamZRef     = useRef(8); // 換方向後的冷卻幀數
   if (!trailCacheRef.current) {
     trailCacheRef.current = { solid:mkCache(), hollow:mkCache(), cylinder:mkCache(), hollowCyl:mkCache() };
   }
@@ -415,8 +417,130 @@ function MultiSphereSimulation() {
     window.addEventListener('resize',handleResize);
     const ro=new ResizeObserver(handleResize);
     ro.observe(mountRef.current);
-    const animate=()=>{requestAnimationFrame(animate); renderer.render(scene,camera);};
-    animate();
+    let lastCamTs = 0;
+    const updateObjects = () => {
+      const t = timeRef.current;
+      const phy = phyRef.current;
+      if(!phy.theta) return;
+      const {isUphill,theta,liveHeight,I_solid,I_hollowSphere,I_cylinder,I_hollowCylinder,
+             maxTime_solid,maxTime_hollowSphere,maxTime_cylinder,maxTime_hollowCylinder,
+             calcY_up,calcY_down,calcK} = phy;
+      const cosT=Math.cos(theta), sinT=Math.sin(theta);
+      const getPos=(t,I,maxT,z)=>{
+        const tc=Math.min(t,maxT);
+        if(isUphill){ const Y=calcY_up(tc,I),s=Y/sinT; return new THREE.Vector3(s*cosT-r*sinT,s*sinT+r*cosT,z); }
+        else { const y=Math.min(calcY_down(tc,I),liveHeight),s=y/sinT; return new THREE.Vector3(s*cosT+r*sinT,-s*sinT+r*cosT,z); }
+      };
+      const z0=-(3*r+1.5*gap),z1=-(r+0.5*gap),z2=r+0.5*gap,z3=3*r+1.5*gap;
+      const updO=(mesh,I,maxT,z,isCyl)=>{
+        if(!mesh) return;
+        mesh.position.copy(getPos(t,I,maxT,z));
+        const k=calcK(Math.min(t,maxT),I);
+        if(isCyl){
+          const qx=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),Math.PI/2);
+          const qz=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),-k);
+          mesh.quaternion.multiplyQuaternions(qz,qx);
+        } else { mesh.rotation.z=-k; }
+      };
+      updO(sphereRef.current,         I_solid,          maxTime_solid,          z0,false);
+      updO(hollowSphereRef.current,   I_hollowSphere,   maxTime_hollowSphere,   z1,false);
+      updO(cylinderRef.current,       I_cylinder,       maxTime_cylinder,       z2,true);
+      updO(hollowCylinderRef.current, I_hollowCylinder, maxTime_hollowCylinder, z3,true);
+    };
+    const updateCamera = (ts) => {
+      const cam = cameraRef.current;
+      if(!cam) return;
+      const rawDt = lastCamTs ? (ts - lastCamTs) / 1000 : 0.016;
+      lastCamTs = ts;
+      const dt = Math.min(rawDt, 0.05);
+      const meshes = [sphereRef,hollowSphereRef,cylinderRef,hollowCylinderRef]
+        .map(r=>r.current).filter(Boolean);
+      if(meshes.length !== 4) return;
+      const positions = meshes.map(m=>m.position);
+      const centerX = positions.reduce((a,b)=>a+b.x,0)/4;
+      const allY = meshes.map(m=>m.position.y);
+      const maxObjY = Math.max(...allY), minObjY = Math.min(...allY);
+      const midY = (maxObjY+minObjY)/2, rangeY = maxObjY-minObjY;
+      const targetCamY  = midY + 18 + rangeY * 0.5;
+      const targetLookY = midY - 10 - rangeY * 0.5;
+
+      // X/Y lerp
+      const alphaXY = 1 - Math.pow(0.1, dt);
+      cam.position.x += (centerX    - cam.position.x) * alphaXY;
+      cam.position.y += (targetCamY - cam.position.y) * alphaXY;
+
+      // 解析解：直接算出讓所有物體 NDC X 在 [-limit, +limit] 內所需的最小 Z
+      // 透視相機：NDC_X = (wx - camX) / (wz - camZ) / tan(fovX/2)
+      // 要 |NDC_X| <= limit → |wx - camX| <= limit * |wz - camZ| * tanFovX
+      // camZ 未知，wz=0（所有物體 Z 軸深度，相機看向 -Z，物體在 camZ 前方）
+      // 實際上相機 lookAt 有旋轉，用 view matrix 投影更準確，但相機幾乎正對 -Z
+      // 用簡化：view_x ≈ wx - camX, view_z ≈ camZ (因為 lookAt 角度小)
+      const MARGIN = 0.42;
+      const limit = 1 - MARGIN;
+      const aspect = cam.aspect;
+      const tanHalfFovY = Math.tan(cam.fov * Math.PI / 180 / 2);
+      const tanHalfFovX = tanHalfFovY * aspect;
+      // 對每個物體，NDC_X = (wx - camX) / (camZ * tanHalfFovX)  [近似，wz≈0]
+      // 需要 camZ >= |wx - camX| / (limit * tanHalfFovX)
+      let neededZ = 8;
+      positions.forEach(p => {
+        const dx = Math.abs(p.x - cam.position.x);
+        neededZ = Math.max(neededZ, dx / (limit * tanHalfFovX));
+      });
+      // 加一點餘量
+      neededZ *= 1.05;
+
+      // targetCamZRef: 立即擴大，極慢縮小
+      if(neededZ > targetCamZRef.current){
+        targetCamZRef.current = neededZ;
+      } else {
+        targetCamZRef.current += (neededZ - targetCamZRef.current) * (1 - Math.pow(0.003, dt));
+      }
+
+      // Z 直接設定（不 lerp），消除 lerp 造成的一幀落差
+      cam.position.z = targetCamZRef.current;
+
+      cam.lookAt(cam.position.x, targetLookY, 0);
+      cam.far = Math.max(1000, cam.position.z * 3);
+      cam.updateProjectionMatrix();
+    };
+    const updateMarkers = () => {
+      const cam = cameraRef.current;
+      const sprites = markerSpritesRef.current;
+      if(!cam || !sprites.length) return;
+      const meshes = [sphereRef,hollowSphereRef,cylinderRef,hollowCylinderRef]
+        .map(r=>r.current).filter(Boolean);
+      if(meshes.length !== 4) return;
+      const camDir = new THREE.Vector3(); cam.getWorldDirection(camDir);
+      const camRight = new THREE.Vector3(1,0,0).applyQuaternion(cam.quaternion);
+      const camUp    = new THREE.Vector3(0,1,0).applyQuaternion(cam.quaternion);
+      const TARGET_NDC_H = 0.20;
+      meshes.forEach((mesh, idx) => {
+        const entry = sprites[idx]; if(!entry) return;
+        const { sp, dir } = entry;
+        const ndcMesh = mesh.position.clone().project(cam);
+        const ndcTop  = ndcMesh.clone(); ndcTop.y += TARGET_NDC_H;
+        const worldMesh = ndcMesh.clone().unproject(cam);
+        const worldTop  = ndcTop.clone().unproject(cam);
+        const depth = mesh.position.clone().sub(cam.position).dot(camDir);
+        const dirM  = worldMesh.clone().sub(cam.position).normalize();
+        const dirT  = worldTop.clone().sub(cam.position).normalize();
+        const pM    = cam.position.clone().addScaledVector(dirM, depth / dirM.dot(camDir));
+        const pT    = cam.position.clone().addScaledVector(dirT, depth / dirT.dot(camDir));
+        const spriteH = pM.distanceTo(pT);
+        const spriteW = spriteH * (340/200);
+        const tipW = spriteW * 0.471, tipH = spriteH * 0.45;
+        let center;
+        if(dir==='left')       center = mesh.position.clone().addScaledVector(camRight,-r).addScaledVector(camRight,-tipW);
+        else if(dir==='right') center = mesh.position.clone().addScaledVector(camRight, r).addScaledVector(camRight, tipW);
+        else if(dir==='up')    center = mesh.position.clone().addScaledVector(camUp,    r).addScaledVector(camUp,    tipH);
+        else                   center = mesh.position.clone().addScaledVector(camUp,   -r).addScaledVector(camUp,   -tipH);
+        sp.position.copy(center);
+        sp.scale.set(spriteW, spriteH, 1);
+      });
+    };
+    const animate=(ts)=>{requestAnimationFrame(animate); updateObjects(); updateCamera(ts); updateMarkers(); renderer.render(scene,camera);};
+    animate(0);
     return ()=>{
       window.removeEventListener('resize',handleResize);
       ro.disconnect();
@@ -461,23 +585,6 @@ function MultiSphereSimulation() {
     
     const rl=rankingLabelRef.current;
     const z0=-(3*r+1.5*gap), z1=-(r+0.5*gap), z2=r+0.5*gap, z3=3*r+1.5*gap;
-
-    const updObj=(mesh,I,maxT,z,isCyl=false)=>{
-      const tClamped = Math.min(time, maxT);
-      mesh.position.copy(getObjectPosition(tClamped,I,z));
-      const k=calcK(tClamped,I);
-      if(isCyl){
-        const qx=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),Math.PI/2);
-        const qz=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1), -k);
-        mesh.quaternion.multiplyQuaternions(qz,qx);
-      } else {
-        mesh.rotation.z = -k;
-      }
-    };
-    updObj(sphereRef.current,        I_solid,          maxTime_solid,          z0,false);
-    updObj(hollowSphereRef.current,  I_hollowSphere,   maxTime_hollowSphere,   z1,false);
-    updObj(cylinderRef.current,      I_cylinder,       maxTime_cylinder,       z2,true);
-    updObj(hollowCylinderRef.current,I_hollowCylinder, maxTime_hollowCylinder, z3,true);
 
     // rankingLabelRef 留空（排名直接整合進 marker 標籤）
     while(rl.children.length>0) rl.remove(rl.children[0]);
@@ -626,37 +733,6 @@ function MultiSphereSimulation() {
       const meshes=[sphereRef,hollowSphereRef,cylinderRef,hollowCylinderRef]
         .map(r=>r.current).filter(Boolean);
       if(meshes.length===4){
-        const positions = meshes.map(m=>m.position);
-        const centerX = positions.reduce((a,b)=>a+b.x,0)/4;
-        const allY    = meshes.map(m => m.position.y);
-        const maxObjY = Math.max(...allY), minObjY = Math.min(...allY);
-        const midY    = (maxObjY + minObjY) / 2, rangeY = maxObjY - minObjY;
-        const targetCamY  = midY + 18 + rangeY * 0.5;
-        const targetLookY = midY - 10 - rangeY * 0.5;
-        cam.position.x += (centerX     - cam.position.x) * 0.15;
-        cam.position.y += (targetCamY  - cam.position.y) * 0.15;
-        cam.position.z += (8           - cam.position.z) * 0.05;
-        cam.lookAt(cam.position.x, targetLookY, 0);
-        cam.far = Math.max(1000, cam.position.z * 3);
-        cam.updateProjectionMatrix();
-        const MARGIN = 0.42;
-        for(let iter=0; iter<6; iter++){
-          const ndcs  = positions.map(p => p.clone().project(cam));
-          const maxNX = Math.max(...ndcs.map(v=>v.x)), minNX = Math.min(...ndcs.map(v=>v.x));
-          const maxNY = Math.max(...ndcs.map(v=>v.y)), minNY = Math.min(...ndcs.map(v=>v.y));
-          const xOvershoot = Math.max(maxNX-(1-MARGIN), (-1+MARGIN)-minNX, 0);
-          const yOverTop   = Math.max(maxNY-(1-MARGIN), 0);
-          const yOverBot   = Math.max((-1+MARGIN)-minNY, 0);
-          if(xOvershoot<0.001&&yOverTop<0.001&&yOverBot<0.001) break;
-          if(xOvershoot>0.001) cam.position.z += cam.position.z * xOvershoot;
-          const halfH = Math.tan(cam.fov*Math.PI/180/2)*Math.abs(cam.position.z);
-          if(yOverTop>0.001) cam.position.y += yOverTop*halfH;
-          if(yOverBot>0.001) cam.position.y -= yOverBot*halfH;
-          cam.lookAt(cam.position.x, targetLookY, 0);
-          cam.far = Math.max(1000, cam.position.z * 3);
-          cam.updateProjectionMatrix();
-        }
-
         while(markersRef.current.children.length > 0) {
           markersRef.current.remove(markersRef.current.children[0]);
         }
@@ -913,6 +989,7 @@ function MultiSphereSimulation() {
             sp.position.copy(spriteCenterWorld);
             sp.renderOrder = 998;
             markersRef.current.add(sp);
+            markerSpritesRef.current[idx] = { sp, dir };
           });
         }
 
@@ -924,6 +1001,8 @@ function MultiSphereSimulation() {
   const clearTrail = () => {
     markerDirRef.current      = ['up','left','right','down'];
     markerCooldownRef.current = [0, 0, 0, 0];
+    markerSpritesRef.current  = [];
+    targetCamZRef.current     = 8;
     if(trailRef.current){
       while(trailRef.current.children.length>0){
         const child = trailRef.current.children[0];
