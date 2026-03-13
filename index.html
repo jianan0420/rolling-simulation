@@ -415,9 +415,12 @@ function MultiSphereSimulation() {
     window.addEventListener('resize',handleResize);
     const ro=new ResizeObserver(handleResize);
     ro.observe(mountRef.current);
-    const updateCamera = () => {
+    let lastCamTs = 0;
+    const updateCamera = (ts) => {
       const cam = cameraRef.current;
       if(!cam) return;
+      const dt = lastCamTs ? Math.min((ts - lastCamTs) / 1000, 0.1) : 0.016;
+      lastCamTs = ts;
       const meshes = [sphereRef,hollowSphereRef,cylinderRef,hollowCylinderRef]
         .map(r=>r.current).filter(Boolean);
       if(meshes.length !== 4) return;
@@ -428,9 +431,12 @@ function MultiSphereSimulation() {
       const midY = (maxObjY+minObjY)/2, rangeY = maxObjY-minObjY;
       const targetCamY  = midY + 18 + rangeY * 0.5;
       const targetLookY = midY - 10 - rangeY * 0.5;
-      cam.position.x += (centerX - cam.position.x) * 0.15;
-      cam.position.y += (targetCamY - cam.position.y) * 0.15;
-      cam.position.z += (8 - cam.position.z) * 0.05;
+      // frame-rate independent lerp: alpha = 1 - decay^dt
+      const alphaXY = 1 - Math.pow(0.15, dt);  // ~溫和跟隨
+      const alphaZ  = 1 - Math.pow(0.30, dt);  // Z 更慢更穩
+      cam.position.x += (centerX - cam.position.x) * alphaXY;
+      cam.position.y += (targetCamY - cam.position.y) * alphaXY;
+      cam.position.z += (8 - cam.position.z) * alphaZ;
       cam.lookAt(cam.position.x, targetLookY, 0);
       cam.far = Math.max(1000, cam.position.z * 3);
       cam.updateProjectionMatrix();
@@ -451,8 +457,8 @@ function MultiSphereSimulation() {
         cam.updateProjectionMatrix();
       }
     };
-    const animate=()=>{requestAnimationFrame(animate); updateCamera(); renderer.render(scene,camera);};
-    animate();
+    const animate=(ts)=>{requestAnimationFrame(animate); updateCamera(ts); renderer.render(scene,camera);};
+    animate(0);
     return ()=>{
       window.removeEventListener('resize',handleResize);
       ro.disconnect();
@@ -1115,6 +1121,11 @@ function MultiSphereSimulation() {
       {isUphill && (
         <div style={{background:'linear-gradient(90deg,rgba(255,160,80,0.18),rgba(255,200,80,0.12))',borderBottom:'1px solid rgba(255,160,80,0.35)',padding:'4px 16px',textAlign:'center',fontSize:'11px',fontWeight:'bold',color:'#ffaa44',letterSpacing:'1.5px',flexShrink:0}}>
           ▲ 爬坡模式 ▲ &nbsp;|&nbsp; V = {liveInitSpeed} m/s &nbsp;|&nbsp; θ = {Math.abs(liveAngle)}°
+        </div>
+      )}
+      {!isUphill && (
+        <div style={{background:'linear-gradient(90deg,rgba(80,200,120,0.18),rgba(80,255,150,0.12))',borderBottom:'1px solid rgba(80,200,120,0.35)',padding:'4px 16px',textAlign:'center',fontSize:'11px',fontWeight:'bold',color:'#66dd99',letterSpacing:'1.5px',flexShrink:0}}>
+          ▼ 下坡模式 ▼ &nbsp;|&nbsp; H = {liveHeight} m &nbsp;|&nbsp; θ = {Math.abs(liveAngle)}°
         </div>
       )}
 
