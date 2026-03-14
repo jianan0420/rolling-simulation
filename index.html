@@ -581,27 +581,24 @@ function MultiSphereSimulation() {
       // ── 計算當前 RANKS ──
       const [s0,s1,s2,s3] = stoppedRef.current;
       const getRank = (objName, stopped) => {
-        const t = timeRef.current;
         const phy = phyRef.current;
         if(!phy.theta) return null;
         const {isUphill,calcStopTime,maxTime_solid,maxTime_hollowSphere,maxTime_cylinder,maxTime_hollowCylinder,
-               I_solid,I_hollowSphere,I_cylinder,I_hollowCylinder,calcY_up,calcY_down,liveHeight} = phy;
-        const getY = (I,maxT) => {
-          const tc = Math.min(t,maxT);
-          return isUphill ? calcY_up(tc,I) : Math.min(calcY_down(tc,I),liveHeight);
-        };
+               I_solid,I_hollowSphere,I_cylinder,I_hollowCylinder} = phy;
         const all = [
-          {name:'solid',     Y:getY(I_solid,maxTime_solid),           stopped:s0},
-          {name:'hollow',    Y:getY(I_hollowSphere,maxTime_hollowSphere), stopped:s1},
-          {name:'cylinder',  Y:getY(I_cylinder,maxTime_cylinder),     stopped:s2},
-          {name:'hollowCyl', Y:getY(I_hollowCylinder,maxTime_hollowCylinder),stopped:s3},
+          {name:'solid',     maxT:maxTime_solid,           stopT:calcStopTime(I_solid),           stopped:s0},
+          {name:'hollow',    maxT:maxTime_hollowSphere,    stopT:calcStopTime(I_hollowSphere),    stopped:s1},
+          {name:'cylinder',  maxT:maxTime_cylinder,        stopT:calcStopTime(I_cylinder),        stopped:s2},
+          {name:'hollowCyl', maxT:maxTime_hollowCylinder,  stopT:calcStopTime(I_hollowCylinder),  stopped:s3},
         ];
         if(isUphill){
-          const stoppedObjs = all.filter(o=>o.stopped).sort((a,b)=>b.Y-a.Y);
+          // 爬坡：停止越晚（stopT 越大）表示爬得越高，排名越前
+          const stoppedObjs = all.filter(o=>o.stopped).sort((a,b)=>b.stopT-a.stopT);
           const idx = stoppedObjs.findIndex(o=>o.name===objName);
           return stopped && idx>=0 ? idx+1 : null;
         } else {
-          const arrivedObjs = all.filter(o=>o.stopped).sort((a,b)=>a.Y-b.Y);
+          // 下坡：到達越快（maxT 越小）排名越前
+          const arrivedObjs = all.filter(o=>o.stopped).sort((a,b)=>a.maxT-b.maxT);
           const idx = arrivedObjs.findIndex(o=>o.name===objName);
           return stopped && idx>=0 ? idx+1 : null;
         }
