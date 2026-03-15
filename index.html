@@ -43,20 +43,17 @@ function MultiSphereSimulation() {
   const rankingLabelRef   = useRef(null);
   const trailRef          = useRef(null);
   const markersRef        = useRef(null);
-  const htmlMarkersRef    = useRef(null); // HTML overlay 標籤容器
   const scrollRef         = useRef(null);
   const slopeMeshRef      = useRef(null);
   const sLineRef          = useRef(null);
   const mkCache = () => ({ allPts:[], allTs:[], lastT:-1, chunkStart:0, completedMeshes:[], currentMesh:null, prevTEnd:-1, wasReverse:false });
   const trailCacheRef = useRef(null);
-  // 記錄四個物體上一幀距攝影機的距離，用來等比例縮放標籤
-  const prevCamDistRef = useRef([20, 20, 20, 20]);
   const markerDirRef      = useRef(['up','left','right','down']);
   const markerCooldownRef = useRef([0, 0, 0, 0]);
-  const markerSpritesRef  = useRef([]); // 存現有 sprites，animate loop 每幀只更新位置
+  const markerSpritesRef  = useRef([]);
   const targetCamZRef     = useRef(8);
-  const stoppedRef        = useRef([false,false,false,false]); // [solid,hollow,cyl,hollowCyl]
-  const markerRanksRef    = useRef([null,null,null,null]);     // 上一幀 ranks，用於 dirty check // 換方向後的冷卻幀數
+  const stoppedRef        = useRef([false,false,false,false]);
+  const markerRanksRef    = useRef([null,null,null,null]);
   if (!trailCacheRef.current) {
     trailCacheRef.current = { solid:mkCache(), hollow:mkCache(), cylinder:mkCache(), hollowCyl:mkCache() };
   }
@@ -82,9 +79,8 @@ function MultiSphereSimulation() {
   const [draftHollowSph, setDraftHollowSph] = useState(0.88);
   const [draftHollowCyl, setDraftHollowCyl] = useState(0.88);
   const [isAdjusting,    setIsAdjusting]    = useState(false);
-  // 開啟參數面板時的快照，用來判斷關閉時是否有修改
   const paramSnapshotRef = useRef(null);
-  const liveUpdateRafRef = useRef(null); // debounce live state updates via rAF
+  const liveUpdateRafRef = useRef(null);
 
   const [playing, setPlaying] = useState(false);
   const [displaySpeed, setDisplaySpeed] = useState(1);
@@ -93,8 +89,8 @@ function MultiSphereSimulation() {
   const sliderMaxRef = useRef(1);
   const speedRef     = useRef(1);
   const playingRef   = useRef(false);
-  const speedIdxRef  = useRef(7);
-  const phyRef       = useRef({}); // 物理參數 ref，供 animate loop 直接讀取
+  const speedIdxRef  = useRef(8);
+  const phyRef       = useRef({});
   const SPEEDS = [-8, -4, -2, -1, -0.5, -0.25, 0.25, 0.5, 1, 2, 4, 8];
 
   const [secPanel,   setSecPanel]   = useState(false);
@@ -137,7 +133,6 @@ function MultiSphereSimulation() {
     return high;
   };
 
-
   const maxTime_solid          = isUphill ? calcStopTime(I_solid)          : calcMaxTime_down(I_solid);
   const maxTime_hollowSphere   = isUphill ? calcStopTime(I_hollowSphere)   : calcMaxTime_down(I_hollowSphere);
   const maxTime_cylinder       = isUphill ? calcStopTime(I_cylinder)       : calcMaxTime_down(I_cylinder);
@@ -148,7 +143,6 @@ function MultiSphereSimulation() {
   useEffect(()=>{ sliderMaxRef.current=sliderMax; },[sliderMax]);
   useEffect(()=>{ playingRef.current=playing; },[playing]);
 
-  // 每次 render 同步物理參數到 ref，供 animate loop 直接讀取（不觸發 re-render）
   phyRef.current = {
     isUphill, theta, liveHeight,
     I_solid, I_hollowSphere, I_cylinder, I_hollowCylinder,
@@ -201,30 +195,18 @@ function MultiSphereSimulation() {
   useEffect(()=>{ setCylinderStopped(isUphill ? time>=maxTime_cylinder-tol : calcY_down(time,I_cylinder)>=liveHeight-liveHeight*0.005); },[time,maxTime_cylinder,isUphill]);
   useEffect(()=>{ setHollowCylStopped(isUphill ? time>=maxTime_hollowCylinder-tol : calcY_down(time,I_hollowCylinder)>=liveHeight-liveHeight*0.005); },[time,maxTime_hollowCylinder,isUphill]);
 
+  // ── 排名函數（UI 面板用）──
+  // 下坡：依 maxTime 升冪（最快先到 = 最小時間 = 第1名）
+  // 上坡：依 stopTime 降冪（飛得最高 = 最長時間 = 第1名）
   const getRealTimeRank = (objName, stopped) => {
     if (!stopped) return null;
     const stoppedObjs = [];
-    if(solidStopped) {
-      const val = isUphill ? calcStopTime(I_solid) : maxTime_solid;
-      stoppedObjs.push({name:'solid', val: val});
-    }
-    if(hollowStopped) {
-      const val = isUphill ? calcStopTime(I_hollowSphere) : maxTime_hollowSphere;
-      stoppedObjs.push({name:'hollow', val: val});
-    }
-    if(cylinderStopped) {
-      const val = isUphill ? calcStopTime(I_cylinder) : maxTime_cylinder;
-      stoppedObjs.push({name:'cylinder', val: val});
-    }
-    if(hollowCylStopped) {
-      const val = isUphill ? calcStopTime(I_hollowCylinder) : maxTime_hollowCylinder;
-      stoppedObjs.push({name:'hollowCyl', val: val});
-    }
-    if(isUphill){
-      stoppedObjs.sort((a,b)=>b.val-a.val);
-    } else {
-      stoppedObjs.sort((a,b)=>a.val-b.val);
-    }
+    if(solidStopped)    stoppedObjs.push({name:'solid',     val: isUphill ? calcStopTime(I_solid)          : maxTime_solid});
+    if(hollowStopped)   stoppedObjs.push({name:'hollow',    val: isUphill ? calcStopTime(I_hollowSphere)   : maxTime_hollowSphere});
+    if(cylinderStopped) stoppedObjs.push({name:'cylinder',  val: isUphill ? calcStopTime(I_cylinder)       : maxTime_cylinder});
+    if(hollowCylStopped)stoppedObjs.push({name:'hollowCyl', val: isUphill ? calcStopTime(I_hollowCylinder) : maxTime_hollowCylinder});
+    // 下坡：時間小 → 先到 → 好；上坡：時間大 → 飛更高 → 好
+    stoppedObjs.sort((a,b) => isUphill ? b.val-a.val : a.val-b.val);
     const idx = stoppedObjs.findIndex(o=>o.name===objName);
     return idx !== -1 ? idx + 1 : null;
   };
@@ -266,7 +248,7 @@ function MultiSphereSimulation() {
   useEffect(()=>{
     const onKey=(e)=>{
       if(e.target.tagName==='INPUT') return;
-      if(secParamsRef.current) return; // 參數面板開啟時不觸發播放快捷鍵
+      if(secParamsRef.current) return;
       if(e.key===' '||e.code==='Space'){
         e.preventDefault();
         setPlaying(p=>{playingRef.current=!p;return !p;});
@@ -289,7 +271,6 @@ function MultiSphereSimulation() {
     const W=mountRef.current.clientWidth,H=mountRef.current.clientHeight;
     const scene=new THREE.Scene(); scene.background=new THREE.Color(0x0f1419);
     const camera=new THREE.PerspectiveCamera(60,W/H,0.1,1000);
-    // 初始位置先設一個合理值，第0幀的 useEffect 會立刻修正
     camera.position.set(0, 20, 8); camera.lookAt(0, 0, 0); cameraRef.current=camera;
     const renderer=new THREE.WebGLRenderer({antialias:true});
     renderer.setSize(W,H); renderer.setPixelRatio(window.devicePixelRatio); renderer.shadowMap.enabled=true;
@@ -309,7 +290,6 @@ function MultiSphereSimulation() {
       if(sLineRef.current) slopeGroup.remove(sLineRef.current);
 
       const sinT=Math.sin(theta), cosT=Math.cos(theta);
-      // 只防止完全為 0（除法保護），允許很小的角度正常計算長度
       const safeSinT = Math.max(Math.abs(sinT), 0.001);
       
       const uphillPeakH = isUphill ? Math.max(
@@ -321,11 +301,9 @@ function MultiSphereSimulation() {
       
       let sWX = isUphill 
         ? (uphillPeakH/safeSinT)*1.15
-        : (liveHeight/safeSinT); // 剛好延伸到使用者設定的高度
+        : (liveHeight/safeSinT);
       
-      if(!isFinite(sWX) || sWX <= 0) {
-        sWX = 20;
-      }
+      if(!isFinite(sWX) || sWX <= 0) sWX = 20;
       
       const sWZ=2*(4*r+2*gap);
       const sGeo=new THREE.PlaneGeometry(sWX,sWZ);
@@ -333,7 +311,6 @@ function MultiSphereSimulation() {
       const qX=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),Math.PI/2);
       const qZ=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1), isUphill ? theta : -theta);
       slopeMesh.quaternion.multiplyQuaternions(qZ,qX);
-      // 斜面從原點(0,0)開始只往+X延伸，中心偏移到斜面長度一半處
       const slopeCX = (sWX/2)*cosT;
       const slopeCY = isUphill ? (sWX/2)*sinT : -(sWX/2)*sinT;
       slopeMesh.position.set(slopeCX, slopeCY, 0); slopeMesh.receiveShadow=true; 
@@ -419,7 +396,7 @@ function MultiSphereSimulation() {
     window.addEventListener('resize',handleResize);
     const ro=new ResizeObserver(handleResize);
     ro.observe(mountRef.current);
-    let lastCamTs = 0;
+
     const updateObjects = () => {
       const t = timeRef.current;
       const phy = phyRef.current;
@@ -449,54 +426,49 @@ function MultiSphereSimulation() {
       updO(cylinderRef.current,       I_cylinder,       maxTime_cylinder,       z2,true);
       updO(hollowCylinderRef.current, I_hollowCylinder, maxTime_hollowCylinder, z3,true);
     };
-    const updateCamera = (ts) => {
+
+    const updateCamera = () => {
       const cam = cameraRef.current;
       if(!cam) return;
-      lastCamTs = ts;
       const meshes = [sphereRef,hollowSphereRef,cylinderRef,hollowCylinderRef]
-        .map(r=>r.current).filter(Boolean);
+        .map(ref=>ref.current).filter(Boolean);
       if(meshes.length !== 4) return;
       const positions = meshes.map(m=>m.position);
 
-      // 目標 X = 所有物體的中心 X
       const targetX = positions.reduce((a,b)=>a+b.x,0)/4;
-
-      // 目標 Y = 讓物體垂直置中
       const allY = positions.map(p=>p.y);
       const maxObjY=Math.max(...allY), minObjY=Math.min(...allY);
       const midY=(maxObjY+minObjY)/2, rangeY=maxObjY-minObjY;
       const targetY    = midY + 18 + rangeY*0.5;
       const targetLookY= midY - 10 - rangeY*0.5;
 
-      // 目標 Z = 解析解：所有物體都在 NDC X 邊界內所需最小 Z
       const MARGIN = 0.42;
       const limit  = 1 - MARGIN;
       const tanHalfFovX = Math.tan(cam.fov*Math.PI/180/2) * cam.aspect;
       let targetZ = 8;
       positions.forEach(p => {
-        const dx = Math.abs(p.x - targetX); // 用 targetX（物體中心），非 cam 當前位置
+        const dx = Math.abs(p.x - targetX);
         targetZ = Math.max(targetZ, dx / (limit * tanHalfFovX));
       });
       targetZ *= 1.05;
 
-      // targetCamZRef：只往外推（立即），往內縮極慢
       if(targetZ > targetCamZRef.current){
         targetCamZRef.current = targetZ;
       } else {
-        targetCamZRef.current += (targetZ - targetCamZRef.current) * 0.002; // 固定極小步長，每幀縮一點點
+        targetCamZRef.current += (targetZ - targetCamZRef.current) * 0.002;
       }
 
-      // 直接設定，無 lerp，無抖動
       cam.position.set(targetX, targetY, targetCamZRef.current);
       cam.lookAt(targetX, targetLookY, 0);
       cam.far = Math.max(1000, cam.position.z*3);
       cam.updateProjectionMatrix();
     };
+
     const updateMarkers = () => {
       const cam = cameraRef.current;
       if(!cam || !markersRef.current) return;
       const meshes = [sphereRef,hollowSphereRef,cylinderRef,hollowCylinderRef]
-        .map(r=>r.current).filter(Boolean);
+        .map(ref=>ref.current).filter(Boolean);
       if(meshes.length !== 4) return;
 
       const MARKER_NAMES     = ['實心球','空心球','實心柱','空心柱'];
@@ -509,7 +481,6 @@ function MultiSphereSimulation() {
       const camRight = new THREE.Vector3(1,0,0).applyQuaternion(cam.quaternion);
       const camUp    = new THREE.Vector3(0,1,0).applyQuaternion(cam.quaternion);
 
-      // ── 計算每個物體在某方向的 spriteH/W/tipW/tipH/center ──
       const getSpriteInfo = (mesh, dir) => {
         const ndcM = mesh.position.clone().project(cam);
         const ndcT = ndcM.clone(); ndcT.y += TARGET_NDC_H;
@@ -552,7 +523,6 @@ function MultiSphereSimulation() {
         return false;
       };
 
-      // ── 選方向（只在必要時換） ──
       const prevDirs = markerDirRef.current;
       const chosenDirs = [], chosenBBoxes = [];
       meshes.forEach((mesh,idx) => {
@@ -578,31 +548,29 @@ function MultiSphereSimulation() {
       });
       markerDirRef.current = chosenDirs;
 
-      // ── 計算當前 RANKS ──
+      // ── 排名計算（marker 用）──
+      // 修正：下坡排名依 maxTime 升冪，不依當前 Y 位置（到底後 Y 都相同）
       const [s0,s1,s2,s3] = stoppedRef.current;
       const getRank = (objName, stopped) => {
+        if(!stopped) return null;
         const phy = phyRef.current;
         if(!phy.theta) return null;
-        const {isUphill,calcStopTime,maxTime_solid,maxTime_hollowSphere,maxTime_cylinder,maxTime_hollowCylinder,
-               I_solid,I_hollowSphere,I_cylinder,I_hollowCylinder} = phy;
+        const {isUphill, maxTime_solid, maxTime_hollowSphere, maxTime_cylinder, maxTime_hollowCylinder,
+               I_solid, I_hollowSphere, I_cylinder, I_hollowCylinder, calcStopTime} = phy;
+
         const all = [
-          {name:'solid',     maxT:maxTime_solid,           stopT:calcStopTime(I_solid),           stopped:s0},
-          {name:'hollow',    maxT:maxTime_hollowSphere,    stopT:calcStopTime(I_hollowSphere),    stopped:s1},
-          {name:'cylinder',  maxT:maxTime_cylinder,        stopT:calcStopTime(I_cylinder),        stopped:s2},
-          {name:'hollowCyl', maxT:maxTime_hollowCylinder,  stopT:calcStopTime(I_hollowCylinder),  stopped:s3},
+          {name:'solid',     val: isUphill ? calcStopTime(I_solid)          : maxTime_solid,          stopped:s0},
+          {name:'hollow',    val: isUphill ? calcStopTime(I_hollowSphere)   : maxTime_hollowSphere,   stopped:s1},
+          {name:'cylinder',  val: isUphill ? calcStopTime(I_cylinder)       : maxTime_cylinder,       stopped:s2},
+          {name:'hollowCyl', val: isUphill ? calcStopTime(I_hollowCylinder) : maxTime_hollowCylinder, stopped:s3},
         ];
-        if(isUphill){
-          // 爬坡：停止越晚（stopT 越大）表示爬得越高，排名越前
-          const stoppedObjs = all.filter(o=>o.stopped).sort((a,b)=>b.stopT-a.stopT);
-          const idx = stoppedObjs.findIndex(o=>o.name===objName);
-          return stopped && idx>=0 ? idx+1 : null;
-        } else {
-          // 下坡：到達越快（maxT 越小）排名越前
-          const arrivedObjs = all.filter(o=>o.stopped).sort((a,b)=>a.maxT-b.maxT);
-          const idx = arrivedObjs.findIndex(o=>o.name===objName);
-          return stopped && idx>=0 ? idx+1 : null;
-        }
+        // 下坡：val=maxTime，升冪 → 最快(最小)=第1名
+        // 上坡：val=stopTime，降冪 → 飛最高(最大)=第1名
+        const stoppedObjs = all.filter(o=>o.stopped).sort((a,b) => isUphill ? b.val-a.val : a.val-b.val);
+        const idx = stoppedObjs.findIndex(o=>o.name===objName);
+        return idx >= 0 ? idx+1 : null;
       };
+
       const RANKS = [
         getRank('solid',    s0),
         getRank('hollow',   s1),
@@ -610,7 +578,6 @@ function MultiSphereSimulation() {
         getRank('hollowCyl',s3),
       ];
 
-      // ── dirty check：只有 dir 或 rank 改變才重建 texture ──
       const prevRanks = markerRanksRef.current;
       const dirChanged   = chosenDirs.some((d,i) => d !== (markerSpritesRef.current[i]?.dir));
       const rankChanged  = RANKS.some((rk,i) => rk !== prevRanks[i]);
@@ -618,7 +585,6 @@ function MultiSphereSimulation() {
 
       if(needRebuild){
         markerRanksRef.current = RANKS;
-        // 清舊 sprites
         while(markersRef.current.children.length>0)
           markersRef.current.remove(markersRef.current.children[0]);
 
@@ -676,7 +642,6 @@ function MultiSphereSimulation() {
           markerSpritesRef.current[idx] = { sp, dir };
         });
       } else {
-        // 只更新位置和 scale（每幀）
         meshes.forEach((mesh,idx) => {
           const entry = markerSpritesRef.current[idx]; if(!entry) return;
           const info  = getSpriteInfo(mesh, entry.dir);
@@ -685,6 +650,7 @@ function MultiSphereSimulation() {
         });
       }
     };
+
     const animate=(ts)=>{requestAnimationFrame(animate); updateObjects(); updateCamera(ts); updateMarkers(); renderer.render(scene,camera);};
     animate(0);
     return ()=>{
@@ -696,23 +662,25 @@ function MultiSphereSimulation() {
         mountRef.current.removeChild(renderer.domElement);
       const mkC = () => ({ allPts:[], allTs:[], lastT:-1, chunkStart:0, completedMeshes:[], currentMesh:null, prevTEnd:-1, wasReverse:false });
       trailCacheRef.current = { solid:mkC(), hollow:mkC(), cylinder:mkC(), hollowCyl:mkC() };
+      // 重置 marker sprites，讓新 scene 第一幀強制重建標籤
+      markerSpritesRef.current = [];
+      markerRanksRef.current   = [null,null,null,null];
     };
   },[liveAngle,liveHeight,liveInitSpeed,liveHollowSph,liveHollowCyl]);
 
   useEffect(()=>{
     if(!sphereRef.current) return;
-    // 同步 stopped 狀態給 animate loop 用
     stoppedRef.current = [solidStopped, hollowStopped, cylinderStopped, hollowCylStopped];
     
     if(isUphill && slopeMeshRef.current){
       const sinT=Math.sin(theta), cosT=Math.cos(theta);
       const peakHeights = [
-        {I: I_solid, peakH: calcY_up(calcStopTime(I_solid), I_solid)},
-        {I: I_hollowSphere, peakH: calcY_up(calcStopTime(I_hollowSphere), I_hollowSphere)},
-        {I: I_cylinder, peakH: calcY_up(calcStopTime(I_cylinder), I_cylinder)},
-        {I: I_hollowCylinder, peakH: calcY_up(calcStopTime(I_hollowCylinder), I_hollowCylinder)}
+        calcY_up(calcStopTime(I_solid), I_solid),
+        calcY_up(calcStopTime(I_hollowSphere), I_hollowSphere),
+        calcY_up(calcStopTime(I_cylinder), I_cylinder),
+        calcY_up(calcStopTime(I_hollowCylinder), I_hollowCylinder)
       ];
-      const highestPeak = Math.max(...peakHeights.map(p => p.peakH));
+      const highestPeak = Math.max(...peakHeights);
       const safeSinT = Math.max(Math.abs(sinT), 0.001);
       const sWX = (highestPeak/safeSinT)*1.15;
       const sWZ=2*(4*r+2*gap);
@@ -733,8 +701,6 @@ function MultiSphereSimulation() {
     
     const rl=rankingLabelRef.current;
     const z0=-(3*r+1.5*gap), z1=-(r+0.5*gap), z2=r+0.5*gap, z3=3*r+1.5*gap;
-
-    // rankingLabelRef 留空（排名直接整合進 marker 標籤）
     while(rl.children.length>0) rl.remove(rl.children[0]);
 
     {
@@ -776,14 +742,12 @@ function MultiSphereSimulation() {
         c.wasReverse = isReverse;
         c.prevTEnd = tEnd;
 
-        // 方向切換：完整清空所有 mesh，從 allPts 截取重建，避免殘留線段
         if (dirChanged) {
           c.completedMeshes.forEach(m => removeMesh(m));
           removeMesh(c.currentMesh);
           c.completedMeshes = [];
           c.currentMesh = null;
           c.chunkStart = 0;
-          // 截掉 allPts 中超過 tEnd 的部分（切回正向時）
           if (!isReverse && c.allTs.length > 0) {
             let cutIdx = c.allTs.length - 1;
             while (cutIdx > 0 && c.allTs[cutIdx] > tEnd + 1e-4) cutIdx--;
@@ -793,7 +757,6 @@ function MultiSphereSimulation() {
           }
         }
 
-        // 正向：累積新點
         if (!isReverse) {
           const startI = c.lastT < 0 ? 0 : Math.floor(c.lastT / DT) + 1;
           for (let i = startI; ; i++) {
@@ -823,17 +786,14 @@ function MultiSphereSimulation() {
         }
 
         if (isReverse) {
-          // 倒轉：二分搜尋找 tEnd 對應 index，只顯示該範圍
           let lo = 0, hi = c.allTs.length - 1, idx = 0;
           while (lo <= hi) {
             const mid = (lo + hi) >> 1;
             if (c.allTs[mid] <= tEnd + 1e-6) { idx = mid; lo = mid + 1; }
             else hi = mid - 1;
           }
-          // 方向剛切換時 completedMeshes 已清空，直接重建全部
           if (dirChanged) {
             const allVisible = c.allPts.slice(0, idx + 1);
-            // 分塊重建
             let cs = 0;
             while (allVisible.length - cs >= CHUNK + OVERLAP) {
               const mesh = buildTube(allVisible.slice(cs, cs + CHUNK + OVERLAP), color);
@@ -845,7 +805,6 @@ function MultiSphereSimulation() {
               ? buildTube(allVisible.slice(cs), color) : null;
             if (c.currentMesh) trail.add(c.currentMesh);
           } else {
-            // 持續倒轉：移除超出的 chunk，重建 active 段
             const keepChunks = Math.floor(idx / CHUNK);
             while (c.completedMeshes.length > keepChunks) removeMesh(c.completedMeshes.pop());
             c.chunkStart = keepChunks * CHUNK;
@@ -857,7 +816,6 @@ function MultiSphereSimulation() {
           return;
         }
 
-        // 正向：分塊建立已完成段落
         while (c.allPts.length - c.chunkStart >= CHUNK + OVERLAP) {
           const chunkPts = c.allPts.slice(c.chunkStart, c.chunkStart + CHUNK + OVERLAP);
           const mesh = buildTube(chunkPts, color);
@@ -897,21 +855,13 @@ function MultiSphereSimulation() {
   };
 
   useEffect(()=>{
-    setPlaying(false);
-    setTime(0);
-    setDisplaySpeed(1);
-    speedRef.current=1;
-    speedIdxRef.current=8;
-    clearTrail();
+    setPlaying(false); setTime(0); setDisplaySpeed(1);
+    speedRef.current=1; speedIdxRef.current=8; clearTrail();
   },[committedAngle,committedHeight,committedInitSpd]);
 
   useEffect(()=>{
-    setPlaying(false);
-    setTime(0);
-    setDisplaySpeed(1);
-    speedRef.current=1;
-    speedIdxRef.current=8;
-    clearTrail();
+    setPlaying(false); setTime(0); setDisplaySpeed(1);
+    speedRef.current=1; speedIdxRef.current=8; clearTrail();
   },[committedHollowSph,committedHollowCyl]);
 
   const getDisplayY=(I,maxT)=> isUphill ? calcY_up(Math.min(time,maxT),I) : Math.min(calcY_down(time,I),liveHeight);
@@ -967,45 +917,23 @@ function MultiSphereSimulation() {
 
   const draftIsUphill = draftAngle < 0;
   
-  const resetOnParamChange = () => {
-    setPlaying(false);
-    setTime(0);
-    setDisplaySpeed(1);
-    speedRef.current=1;
-    speedIdxRef.current=8;
-    if(rankingLabelRef.current){
-      while(rankingLabelRef.current.children.length>0){
-        rankingLabelRef.current.remove(rankingLabelRef.current.children[0]);
-      }
-    }
-    clearTrail();
-  };
-
-  // 拖動結束時才 commit（觸發耗時計算）
-  const commitParam = (angle, height, initSpd, hollowSph, hollowCyl) => {
-    const ang = angle === 0 ? (angle > 0 ? 1 : -1) : angle;
-    setCommittedAngle(ang);
-    setCommittedHeight(height);
-    setCommittedInitSpd(initSpd);
-    setCommittedHollowSph(hollowSph);
-    setCommittedHollowCyl(hollowCyl);
-    resetOnParamChange();
-  };
-
   const commitRef = useRef({
     angle: 30, height: 10, initSpd: 10, hollowSph: 0.88, hollowCyl: 0.88
   });
   
-  // 用 rAF debounce 更新 live state，避免阻塞 UI 數值顯示
   const scheduleLiveUpdate = (angle, height, initSpd, hollowSph, hollowCyl) => {
     if(liveUpdateRafRef.current) cancelAnimationFrame(liveUpdateRafRef.current);
     liveUpdateRafRef.current = requestAnimationFrame(() => {
-      setLiveAngle(angle);
-      setLiveHeight(height);
-      setLiveInitSpeed(initSpd);
-      setLiveHollowSph(hollowSph);
-      setLiveHollowCyl(hollowCyl);
+      setLiveAngle(angle); setLiveHeight(height); setLiveInitSpeed(initSpd);
+      setLiveHollowSph(hollowSph); setLiveHollowCyl(hollowCyl);
     });
+  };
+
+  const commitParam = (angle, height, initSpd, hollowSph, hollowCyl) => {
+    const ang = angle === 0 ? (angle > 0 ? 1 : -1) : angle;
+    setCommittedAngle(ang); setCommittedHeight(height);
+    setCommittedInitSpd(initSpd); setCommittedHollowSph(hollowSph);
+    setCommittedHollowCyl(hollowCyl);
   };
 
   const paramRows = [
@@ -1015,8 +943,7 @@ function MultiSphereSimulation() {
       val: Math.abs(draftAngle),
       set:(v)=>{
         const vv = draftIsUphill ? -Math.abs(v) : Math.abs(v);
-        setDraftAngle(vv);
-        commitRef.current.angle = vv;
+        setDraftAngle(vv); commitRef.current.angle = vv;
         scheduleLiveUpdate(vv, commitRef.current.height, commitRef.current.initSpd, commitRef.current.hollowSph, commitRef.current.hollowCyl);
       },
       onRelease:()=>{ commitParam(commitRef.current.angle, commitRef.current.height, commitRef.current.initSpd, commitRef.current.hollowSph, commitRef.current.hollowCyl); },
@@ -1043,6 +970,24 @@ function MultiSphereSimulation() {
   ];
 
   const distLabel = isUphill ? '上升距離' : '下降距離';
+
+  const doCommitAndClose = () => {
+    const snap = paramSnapshotRef.current;
+    const changed = !snap ||
+      snap.angle !== draftAngle || snap.height !== draftHeight ||
+      snap.initSpd !== draftInitSpd || snap.hollowSph !== draftHollowSph ||
+      snap.hollowCyl !== draftHollowCyl;
+    const ang = draftAngle===0?(draftAngle>0?1:-1):draftAngle;
+    setLiveAngle(ang); setLiveHeight(draftHeight); setLiveInitSpeed(draftInitSpd);
+    setLiveHollowSph(draftHollowSph); setLiveHollowCyl(draftHollowCyl);
+    if(changed){
+      setCommittedAngle(ang); setCommittedHeight(draftHeight);
+      setCommittedInitSpd(draftInitSpd); setCommittedHollowSph(draftHollowSph);
+      setCommittedHollowCyl(draftHollowCyl);
+    }
+    setIsAdjusting(false);
+    paramSnapshotRef.current = null;
+  };
 
   return (
     <div style={{width:'100%',height:'100dvh',minWidth:'320px',display:'flex',flexDirection:'column',backgroundColor:'#0f1419',color:'#fff',fontFamily:"'JetBrains Mono','Courier New',monospace",userSelect:'none',touchAction:'pan-y'}}>
@@ -1112,8 +1057,7 @@ function MultiSphereSimulation() {
                 </div>
               ))}
             </div>
-
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1.4fr 1fr',gap:'8px',marginBottom:'0',alignItems:'start'}}>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1.4fr 1fr',gap:'8px',alignItems:'start'}}>
               <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'4px'}}>
                 <div style={{fontSize:'10px',color:'#888',textAlign:'center',height:'16px'}}><span style={kbdStyle}>←</span></div>
                 <button className="pb"
@@ -1138,39 +1082,15 @@ function MultiSphereSimulation() {
             </div>
           </div>
 
-          <div onPointerDown={pd(()=>setSecPanel(p=>{ if(p){ if(secParams){ 
-            const snap = paramSnapshotRef.current;
-            const changed = !snap ||
-              snap.angle !== draftAngle || snap.height !== draftHeight ||
-              snap.initSpd !== draftInitSpd || snap.hollowSph !== draftHollowSph ||
-              snap.hollowCyl !== draftHollowCyl;
-            const ang = draftAngle===0?(draftAngle>0?1:-1):draftAngle;
-            setLiveAngle(ang); setLiveHeight(draftHeight); setLiveInitSpeed(draftInitSpd);
-            setLiveHollowSph(draftHollowSph); setLiveHollowCyl(draftHollowCyl);
-            if(changed){
-              setCommittedAngle(ang); setCommittedHeight(draftHeight);
-              setCommittedInitSpd(draftInitSpd); setCommittedHollowSph(draftHollowSph);
-              setCommittedHollowCyl(draftHollowCyl);
-              setPlaying(false); setTime(0); setDisplaySpeed(1);
-              speedRef.current=1; speedIdxRef.current=8;
-              if(rankingLabelRef.current){
-                while(rankingLabelRef.current.children.length>0)
-                  rankingLabelRef.current.remove(rankingLabelRef.current.children[0]);
-              }
-              if(trailRef.current){
-                while(trailRef.current.children.length>0){
-                  const child = trailRef.current.children[0];
-                  if(child.geometry) child.geometry.dispose();
-                  if(child.material) child.material.dispose();
-                  trailRef.current.remove(child);
-                }
-              }
-              const mkC = () => ({ allPts:[], allTs:[], lastT:-1, chunkStart:0, completedMeshes:[], currentMesh:null, prevTEnd:-1, wasReverse:false });
-              trailCacheRef.current = { solid:mkC(), hollow:mkC(), cylinder:mkC(), hollowCyl:mkC() };
+          <div onPointerDown={pd(()=>setSecPanel(p=>{
+            if(p){
+              if(secParams) doCommitAndClose();
+              setSecParams(false);setSecData(false);setSecFormula(false);
+            } else {
+              if(scrollRef.current) scrollRef.current.scrollTop=0;
             }
-            setIsAdjusting(false);
-            paramSnapshotRef.current = null;
-          } setSecParams(false);setSecData(false);setSecFormula(false);}else{if(scrollRef.current)scrollRef.current.scrollTop=0;}return !p; }))}
+            return !p;
+          }))}
             style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'9px 14px',borderRadius:'9px',cursor:'pointer',background:secPanel?'linear-gradient(90deg,rgba(0,255,136,0.10) 0%,rgba(100,150,255,0.08) 100%)':'rgba(255,255,255,0.04)',border:`1px solid ${secPanel?'rgba(0,255,136,0.35)':'rgba(255,255,255,0.1)'}`,transition:'all 0.25s ease',userSelect:'none',WebkitTapHighlightColor:'transparent',touchAction:'manipulation'}}>
             <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:'3px',textAlign:'center'}}>
               <span style={{fontSize:'12px',fontWeight:'bold',letterSpacing:'1.2px',textTransform:'uppercase',color:secPanel?'#e0e0e0':'#777',transition:'color 0.25s ease'}}>詳細面板</span>
@@ -1186,52 +1106,8 @@ function MultiSphereSimulation() {
             <div style={{marginBottom:'10px'}}>
               <SectionHeader title="參數控制" open={secParams} onToggle={()=>{
                 if(secParams){
-                  // 關閉面板：比對快照，只有修改過才重置
-                  const snap = paramSnapshotRef.current;
-                  const changed = !snap ||
-                    snap.angle !== draftAngle ||
-                    snap.height !== draftHeight ||
-                    snap.initSpd !== draftInitSpd ||
-                    snap.hollowSph !== draftHollowSph ||
-                    snap.hollowCyl !== draftHollowCyl;
-
-                  const ang = draftAngle === 0 ? (draftAngle > 0 ? 1 : -1) : draftAngle;
-                  setLiveAngle(ang);
-                  setLiveHeight(draftHeight);
-                  setLiveInitSpeed(draftInitSpd);
-                  setLiveHollowSph(draftHollowSph);
-                  setLiveHollowCyl(draftHollowCyl);
-
-                  if(changed){
-                    setCommittedAngle(ang);
-                    setCommittedHeight(draftHeight);
-                    setCommittedInitSpd(draftInitSpd);
-                    setCommittedHollowSph(draftHollowSph);
-                    setCommittedHollowCyl(draftHollowCyl);
-                    setPlaying(false);
-                    setTime(0);
-                    setDisplaySpeed(1);
-                    speedRef.current=1;
-                    speedIdxRef.current=8;
-                    if(rankingLabelRef.current){
-                      while(rankingLabelRef.current.children.length>0)
-                        rankingLabelRef.current.remove(rankingLabelRef.current.children[0]);
-                    }
-                    if(trailRef.current){
-                      while(trailRef.current.children.length>0){
-                        const child = trailRef.current.children[0];
-                        if(child.geometry) child.geometry.dispose();
-                        if(child.material) child.material.dispose();
-                        trailRef.current.remove(child);
-                      }
-                    }
-                    const mkC = () => ({ allPts:[], allTs:[], lastT:-1, chunkStart:0, completedMeshes:[], currentMesh:null, prevTEnd:-1, wasReverse:false });
-                    trailCacheRef.current = { solid:mkC(), hollow:mkC(), cylinder:mkC(), hollowCyl:mkC() };
-                  }
-                  setIsAdjusting(false);
-                  paramSnapshotRef.current = null;
+                  doCommitAndClose();
                 } else {
-                  // 開啟面板：記錄快照
                   paramSnapshotRef.current = {
                     angle: liveAngle, height: liveHeight, initSpd: liveInitSpeed,
                     hollowSph: liveHollowSph, hollowCyl: liveHollowCyl
@@ -1240,13 +1116,10 @@ function MultiSphereSimulation() {
                     angle: liveAngle, height: liveHeight, initSpd: liveInitSpeed,
                     hollowSph: liveHollowSph, hollowCyl: liveHollowCyl
                   };
-                  setDraftAngle(liveAngle);
-                  setDraftHeight(liveHeight);
-                  setDraftInitSpd(liveInitSpeed);
-                  setDraftHollowSph(liveHollowSph);
+                  setDraftAngle(liveAngle); setDraftHeight(liveHeight);
+                  setDraftInitSpd(liveInitSpeed); setDraftHollowSph(liveHollowSph);
                   setDraftHollowCyl(liveHollowCyl);
-                  setIsAdjusting(true);
-                  setPlaying(false);
+                  setIsAdjusting(true); setPlaying(false);
                 }
                 setSecParams(p=>!p);
               }} accent="#00ff88"
@@ -1344,7 +1217,7 @@ function MultiSphereSimulation() {
                   </div>
 
                   <div style={{marginBottom:'10px'}}>
-                    <span className="fk">滾動距離垂直分量 y(t)【{isUphill?'爬坡':'下坡'}】：</span><br/>
+                    <span className="fk">滾動距離垂直分量 y(t)：</span><br/>
                     y(t) = [mr²g / (mr²+I)] · sin²θ · t² / 2
                   </div>
 
@@ -1367,24 +1240,22 @@ function MultiSphereSimulation() {
                   </div>
 
                   <div style={{marginBottom:'10px'}}>
-                    <span className="fk">沿斜面距離 s(t)【{isUphill?'爬坡':'下坡'}】：</span><br/>
+                    <span className="fk">沿斜面距離 s(t)：</span><br/>
                     {isUphill ? <>s(t) = Y(t) / sinθ</> : <>s(t) = y(t) / sinθ</>}
                   </div>
 
                   <div style={{marginBottom:'10px'}}>
-                    <span className="fk">球/柱心位置【{isUphill?'爬坡':'下坡'}】：</span><br/>
+                    <span className="fk">球/柱心位置：</span><br/>
                     {isUphill ? (
                       <>
                         x_c = s·cosθ − r·sinθ<br/>
                         y_c = s·sinθ + r·cosθ<br/>
-                        z_c = zOffset<br/>
                         <span style={{color:'#888',fontSize:'10px'}}>法線方向 = (−sinθ, cosθ)</span>
                       </>
                     ) : (
                       <>
                         x_c = s·cosθ + r·sinθ<br/>
                         y_c = −s·sinθ + r·cosθ<br/>
-                        z_c = zOffset<br/>
                         <span style={{color:'#888',fontSize:'10px'}}>法線方向 = (sinθ, cosθ)</span>
                       </>
                     )}
@@ -1394,23 +1265,13 @@ function MultiSphereSimulation() {
                     <span className="fk">軌跡點座標（擺線 cycloid）</span><br/>
                     {isUphill ? (
                       <>
-                        <span style={{color:'#aaffcc'}}>推導（從下坡反推）：斜面法向量 x 取反 → 接觸向量 x 取反</span><br/>
-                        初始接觸向量（球心→接觸點）= (+sinθ, −cosθ)<br/>
-                        旋轉方向：順時針（向右上滾 = ω &lt; 0）<br/><br/>
                         x_p = s·cosθ − r·sinθ·(1−cos k) − r·cosθ·sin k<br/>
-                        y_p = s·sinθ + r·cosθ·(1−cos k) − r·sinθ·sin k<br/>
-                        z_p = zOffset<br/>
-                        <span style={{color:'#888',fontSize:'10px'}}>s = Y(t)/sinθ，k=2nπ 時接觸點精確落回斜面</span>
+                        y_p = s·sinθ + r·cosθ·(1−cos k) − r·sinθ·sin k
                       </>
                     ) : (
                       <>
-                        <span style={{color:'#aaffcc'}}>推導：接觸點 = 球心 + r × 順時針旋轉(初始接觸向量, k)</span><br/>
-                        初始接觸向量（球心→接觸點）= (−sinθ, −cosθ)<br/>
-                        旋轉方向：順時針（向右下滾 = ω &lt; 0）<br/><br/>
-                        x_p = x_c + r·sinθ·(1−cos k) − r·cosT·sin k<br/>
-                        y_p = y_c + r·cosθ·(1−cos k) + r·sinθ·sin k<br/>
-                        z_p = zOffset<br/>
-                        <span style={{color:'#888',fontSize:'10px'}}>x_c = y/tanθ + r·sinθ，y_c = −y + r·cosθ</span>
+                        x_p = x_c + r·sinθ·(1−cos k) − r·cosθ·sin k<br/>
+                        y_p = y_c + r·cosθ·(1−cos k) + r·sinθ·sin k
                       </>
                     )}
                     <br/><span style={{color:'#888',fontSize:'10px'}}>|接觸點 − 球心| = r 恆成立；k=2nπ 時接觸點落回斜面</span>
