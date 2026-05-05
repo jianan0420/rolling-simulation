@@ -326,10 +326,11 @@ window.MultiSphereSimulation = function MultiSphereSimulation() {
 
   // ── Pointer-drag guard (tap without drag triggers action) ─────────────────
   const pd = (fn) => (e) => {
+    const el = e.currentTarget;
     const startX = e.clientX ?? 0, startY = e.clientY ?? 0;
     let moved = false;
     const onMove = (me) => { if (Math.abs(me.clientX - startX) > 8 || Math.abs(me.clientY - startY) > 8) moved = true; };
-    const onUp   = () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); if (!moved) { e.currentTarget.blur && e.currentTarget.blur(); fn(); } };
+    const onUp   = () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); if (!moved) { el && el.blur && el.blur(); fn(); } };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup',   onUp);
   };
