@@ -52,7 +52,9 @@ $$F = ma = mg \implies a = g$$
 
 總機械能守恆（靜摩擦不做功）：
 
-$$\underbrace{mgh}_{\text{grav. PE}} = \underbrace{\frac{1}{2}mv^2}_{\text{trans. KE}} + \underbrace{\frac{1}{2}I\omega^2}_{\text{rot. KE}}$$
+$$mgh = \frac{1}{2}mv^2 + \frac{1}{2}I\omega^2$$
+
+（$mgh$：重力位能；$\tfrac{1}{2}mv^2$：平移動能；$\tfrac{1}{2}I\omega^2$：轉動動能）
 
 ### 3.2 純滾動不滑動條件
 
@@ -81,7 +83,7 @@ $$\tau = \sum_i r_i F_i = \left(\sum_i m_i r_i^2\right)\alpha = I\alpha$$
 
 $$mgh = \frac{1}{2}mv^2 + \frac{1}{2}I\frac{v^2}{r^2} = \frac{1}{2}mv^2\left(1 + \frac{I}{mr^2}\right)$$
 
-$$\boxed{V = \sqrt{\frac{2gH}{1 + \dfrac{I}{mr^2}}}}$$
+$$\boxed{V = \sqrt{\frac{2gH}{1 + \frac{I}{mr^2}}}}$$
 
 **結論：$I/(mr^2)$ 越大，終端速度越小。**
 
@@ -92,15 +94,15 @@ $$\boxed{V = \sqrt{\frac{2gH}{1 + \dfrac{I}{mr^2}}}}$$
 ### 4.1 建立 ODE
 
 令 $y(t)$ 為物體的垂直位移（$y(0)=0$，$y(T)=H$）。  
-在任意時刻，物體速度 $v(t) = V\big|_{h=y(t)}$：
+將當前高度 $h = y(t)$ 代入能量守恆式，得瞬時速度：
 
-$$v(t) = \sqrt{\frac{2g \cdot y(t)}{1 + \dfrac{I}{mr^2}}}$$
+$$v(t) = \sqrt{\frac{2g \cdot y(t)}{1 + \frac{I}{mr^2}}}$$
 
 垂直分量：
 
-$$\frac{dy}{dt} = v(t)\sin\theta = \sqrt{\frac{2g}{1+\dfrac{I}{mr^2}}} \cdot \sin\theta \cdot \sqrt{y(t)}$$
+$$\frac{dy}{dt} = v(t)\sin\theta = \sqrt{\frac{2g}{1+\frac{I}{mr^2}}} \cdot \sin\theta \cdot \sqrt{y(t)}$$
 
-令常數 $c = \dfrac{mr^2 g}{mr^2+I}$，則：
+令常數 $c = \frac{mr^2 g}{mr^2+I}$，則：
 
 $$\frac{dy}{dt} = \sqrt{2c} \cdot \sin\theta \cdot \sqrt{y(t)}$$
 
@@ -143,7 +145,7 @@ $$\boxed{T = \sqrt{\frac{2H}{g\sin^2\theta}} \cdot \sqrt{1 + \frac{I}{mr^2}}}$$
 以下推導使用柱坐標系，材質密度為 $\rho$，物體半徑 $R$，質量 $M$。  
 代號：$x = r_{\text{inner}}/R$（中空比，$0 \le x < 1$；實心體 $x=0$）
 
-### 5.1 實心球 $I = \dfrac{2}{5}MR^2$
+### 5.1 實心球 $I = \frac{2}{5}MR^2$
 
 $$I = \int r^2\,dm = \iiint r^2 \rho\,dV$$
 
@@ -157,11 +159,11 @@ $$= \frac{\pi\rho}{2}\left[R^4 \cdot 2R - \frac{2R^2 \cdot 2R^3}{3} + \frac{2R^5
 
 $$= \pi\rho R^5 \cdot \frac{8}{15} = \frac{8}{15}\pi\rho R^5$$
 
-其中 $M = \dfrac{4}{3}\pi R^3 \rho$，故：
+其中 $M = \frac{4}{3}\pi R^3 \rho$，故：
 
 $$\boxed{I = \frac{2}{5}MR^2}$$
 
-### 5.2 空心球 $I = \dfrac{2}{5}MR^2 \cdot \dfrac{1-x^5}{1-x^3}$
+### 5.2 空心球 $I = \frac{2}{5}MR^2 \cdot \frac{1-x^5}{1-x^3}$
 
 空心球 = 半徑 $R$ 的實心球 $-$ 半徑 $Rx$ 的實心球：
 
@@ -171,7 +173,7 @@ $$M = \frac{4}{3}\pi R^3\rho(1-x^3)$$
 
 $$\boxed{I = \frac{2}{5}MR^2 \cdot \frac{1-x^5}{1-x^3}}$$
 
-### 5.3 實心圓柱 $I = \dfrac{1}{2}MR^2$
+### 5.3 實心圓柱 $I = \frac{1}{2}MR^2$
 
 柱坐標，柱高 $l$：
 
@@ -181,7 +183,7 @@ $$M = \pi R^2 l \rho$$
 
 $$\boxed{I = \frac{1}{2}MR^2}$$
 
-### 5.4 空心圓柱 $I = \dfrac{1}{2}MR^2 \cdot \dfrac{1-x^4}{1-x^2}$
+### 5.4 空心圓柱 $I = \frac{1}{2}MR^2 \cdot \frac{1-x^4}{1-x^2}$
 
 空心柱 = 外半徑 $R$ 的實心柱 $-$ 內半徑 $Rx$ 的實心柱：
 
@@ -199,8 +201,8 @@ $$\boxed{I = \frac{1}{2}MR^2 \cdot \frac{1-x^4}{1-x^2}}$$
 |------|-----------|------|
 | 實心球 | $2/5 = 0.4$ | 最小 → 最快 |
 | 實心圓柱 | $1/2 = 0.5$ | |
-| 空心球 ($x$) | $\dfrac{2}{5}\cdot\dfrac{1-x^5}{1-x^3}$ | 隨 $x$ 增大而增大 |
-| 空心圓柱 ($x$) | $\dfrac{1}{2}\cdot\dfrac{1-x^4}{1-x^2}$ | 隨 $x$ 增大而增大 |
+| 空心球 ($x$) | $\frac{2}{5}\cdot\frac{1-x^5}{1-x^3}$ | 隨 $x$ 增大而增大 |
+| 空心圓柱 ($x$) | $\frac{1}{2}\cdot\frac{1-x^4}{1-x^2}$ | 隨 $x$ 增大而增大 |
 
 當 $x = 0$（無空心）：
 - 空心球 = 實心球（$0.4$）
@@ -215,7 +217,7 @@ $$\boxed{I = \frac{1}{2}MR^2 \cdot \frac{1-x^4}{1-x^2}}$$
 - $x < 0.68$：實心球 $>$ 空心球 $>$ 實心柱 $>$ 空心柱
 - $x > 0.68$：實心球 $>$ 實心柱 $>$ 空心球 $>$ 空心柱
 
-（交叉點：令 $\dfrac{2}{5}\cdot\dfrac{1-x^5}{1-x^3} = \dfrac{1}{2}$，解得 $x \approx 0.68$）
+（交叉點：令 $\frac{2}{5}\cdot\frac{1-x^5}{1-x^3} = \frac{1}{2}$，解得 $x \approx 0.68$）
 
 ---
 
@@ -227,7 +229,7 @@ $$\boxed{I = \frac{1}{2}MR^2 \cdot \frac{1-x^4}{1-x^2}}$$
 
 $$Y(t) = V\sin\theta \cdot t - \frac{c\sin^2\theta}{2}t^2$$
 
-其中 $c = \dfrac{mr^2 g}{mr^2+I}$ 同前。
+其中 $c = \frac{mr^2 g}{mr^2+I}$ 同前。
 
 ### 7.2 停止時間
 
@@ -372,7 +374,7 @@ Substituting $\omega = v/r$:
 
 $$mgh = \frac{1}{2}mv^2 + \frac{1}{2}I\frac{v^2}{r^2} = \frac{1}{2}mv^2\left(1 + \frac{I}{mr^2}\right)$$
 
-$$\boxed{V = \sqrt{\frac{2gH}{1 + \dfrac{I}{mr^2}}}}$$
+$$\boxed{V = \sqrt{\frac{2gH}{1 + \frac{I}{mr^2}}}}$$
 
 **Conclusion: Larger $I/(mr^2)$ → smaller terminal velocity.**
 
@@ -385,13 +387,13 @@ $$\boxed{V = \sqrt{\frac{2gH}{1 + \dfrac{I}{mr^2}}}}$$
 Let $y(t)$ be vertical displacement ($y(0)=0$, $y(T)=H$).  
 At any instant the speed equals the terminal-velocity formula evaluated at height $y(t)$:
 
-$$v(t) = \sqrt{\frac{2g \cdot y(t)}{1 + \dfrac{I}{mr^2}}}$$
+$$v(t) = \sqrt{\frac{2g \cdot y(t)}{1 + \frac{I}{mr^2}}}$$
 
 Vertical component:
 
-$$\frac{dy}{dt} = v(t)\sin\theta = \sqrt{\frac{2g}{1+\dfrac{I}{mr^2}}} \cdot \sin\theta \cdot \sqrt{y(t)}$$
+$$\frac{dy}{dt} = v(t)\sin\theta = \sqrt{\frac{2g}{1+\frac{I}{mr^2}}} \cdot \sin\theta \cdot \sqrt{y(t)}$$
 
-Define constant $c = \dfrac{mr^2 g}{mr^2+I}$, then:
+Define constant $c = \frac{mr^2 g}{mr^2+I}$, then:
 
 $$\frac{dy}{dt} = \sqrt{2c} \cdot \sin\theta \cdot \sqrt{y(t)}$$
 
@@ -421,21 +423,21 @@ $$\boxed{T = \sqrt{\frac{2H}{g\sin^2\theta}} \cdot \sqrt{1 + \frac{I}{mr^2}}}$$
 
 Notation: $x = r_{\text{inner}}/R$ (hollow ratio, $0 \le x < 1$; solid body: $x=0$).
 
-### 5.1 Solid Sphere $I = \dfrac{2}{5}MR^2$
+### 5.1 Solid Sphere $I = \frac{2}{5}MR^2$
 
-Integrate using cylindrical slices, with $z$ as the axial coordinate ($-R \le z \le R$) and $\sqrt{R^2-z^2}$ the perpendicular radius at height $z$:
+Integrate using cylindrical slices, with $z$ as the axial coordinate ($-R \le z \le R$) and $r$ the radial distance from the axis ($0 \le r \le \sqrt{R^2-z^2}$):
 
-$$I = \int_{-R}^{R}\int_0^{\sqrt{R^2-z^2}} 2\pi\rho_m \cdot \rho_{\perp}^3\,d\rho_{\perp}\,dz$$
+$$I = \int_{-R}^{R}\int_0^{\sqrt{R^2-z^2}} 2\pi\rho_m \cdot r^3\,dr\,dz$$
 
 $$= \int_{-R}^{R} 2\pi\rho_m \cdot \frac{(R^2-z^2)^2}{4}\,dz = \frac{\pi\rho_m}{2}\int_{-R}^{R}(R^4 - 2R^2z^2 + z^4)\,dz$$
 
 $$= \frac{\pi\rho_m}{2} \cdot 2R^5\left(1 - \frac{2}{3} + \frac{1}{5}\right) = \frac{8}{15}\pi\rho_m R^5$$
 
-With $M = \dfrac{4}{3}\pi R^3 \rho_m$:
+With $M = \frac{4}{3}\pi R^3 \rho_m$:
 
 $$\boxed{I_{\text{solid sphere}} = \frac{2}{5}MR^2}$$
 
-### 5.2 Hollow Sphere $I = \dfrac{2}{5}MR^2 \cdot \dfrac{1-x^5}{1-x^3}$
+### 5.2 Hollow Sphere $I = \frac{2}{5}MR^2 \cdot \frac{1-x^5}{1-x^3}$
 
 Hollow sphere = solid sphere of radius $R$ $-$ solid sphere of radius $Rx$:
 
@@ -443,7 +445,7 @@ $$I = \frac{8}{15}\pi\rho_m R^5(1-x^5), \quad M = \frac{4}{3}\pi R^3\rho_m(1-x^3
 
 $$\boxed{I_{\text{hollow sphere}} = \frac{2}{5}MR^2 \cdot \frac{1-x^5}{1-x^3}}$$
 
-### 5.3 Solid Cylinder $I = \dfrac{1}{2}MR^2$
+### 5.3 Solid Cylinder $I = \frac{1}{2}MR^2$
 
 Cylindrical coordinates, height $l$:
 
@@ -451,7 +453,7 @@ $$I = \int_0^l \int_0^R 2\pi\rho_m r^3\,dr\,dz = \frac{\pi}{2}l\rho_m R^4, \quad
 
 $$\boxed{I_{\text{solid cylinder}} = \frac{1}{2}MR^2}$$
 
-### 5.4 Hollow Cylinder $I = \dfrac{1}{2}MR^2 \cdot \dfrac{1-x^4}{1-x^2}$
+### 5.4 Hollow Cylinder $I = \frac{1}{2}MR^2 \cdot \frac{1-x^4}{1-x^2}$
 
 Hollow cylinder = outer solid cylinder (radius $R$) $-$ inner solid cylinder (radius $Rx$):
 
@@ -467,18 +469,18 @@ $$\boxed{I_{\text{hollow cylinder}} = \frac{1}{2}MR^2 \cdot \frac{1-x^4}{1-x^2}}
 |--------|-----------|-------|
 | Solid sphere | $2/5 = 0.4$ | Smallest → fastest |
 | Solid cylinder | $1/2 = 0.5$ | |
-| Hollow sphere ($x$) | $\dfrac{2}{5}\cdot\dfrac{1-x^5}{1-x^3}$ | Increases with $x$ |
-| Hollow cylinder ($x$) | $\dfrac{1}{2}\cdot\dfrac{1-x^4}{1-x^2}$ | Increases with $x$ |
+| Hollow sphere ($x$) | $\frac{2}{5}\cdot\frac{1-x^5}{1-x^3}$ | Increases with $x$ |
+| Hollow cylinder ($x$) | $\frac{1}{2}\cdot\frac{1-x^4}{1-x^2}$ | Increases with $x$ |
 
 At $x = 0$ (fully solid): hollow sphere = solid sphere ($0.4$); hollow cylinder = solid cylinder ($0.5$).  
 As $x \to 1$ (thin shell): hollow sphere → $2/3 \approx 0.667$; hollow cylinder → $1$.
 
 ### Speed Ranking (downhill, same hollow ratio $x$)
 
-- $x < 0.68$: $\text{solid sphere} > \text{hollow sphere} > \text{solid cylinder} > \text{hollow cylinder}$
-- $x > 0.68$: $\text{solid sphere} > \text{solid cylinder} > \text{hollow sphere} > \text{hollow cylinder}$
+- $x < 0.68$: solid sphere $>$ hollow sphere $>$ solid cylinder $>$ hollow cylinder
+- $x > 0.68$: solid sphere $>$ solid cylinder $>$ hollow sphere $>$ hollow cylinder
 
-(Crossover: solving $\dfrac{2}{5}\cdot\dfrac{1-x^5}{1-x^3} = \dfrac{1}{2}$ gives $x \approx 0.68$)
+(Crossover: solving $\frac{2}{5}\cdot\frac{1-x^5}{1-x^3} = \frac{1}{2}$ gives $x \approx 0.68$)
 
 ---
 
@@ -490,7 +492,7 @@ Given initial translational velocity $V$ directed up the slope, the deceleration
 
 $$Y(t) = V\sin\theta \cdot t - \frac{c\sin^2\theta}{2}t^2$$
 
-where $c = \dfrac{mr^2 g}{mr^2+I}$ as before.
+where $c = \frac{mr^2 g}{mr^2+I}$ as before.
 
 ### 7.2 Time to Stop
 
