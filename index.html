@@ -1,0 +1,47 @@
+﻿<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rolling Simulation</title>
+
+  <!-- CDN dependencies -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+
+  <!-- Project styles -->
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- Dev error overlay (shown on uncaught exceptions) -->
+  <div id="errmsg" style="color:red;padding:10px;font-size:12px;white-space:pre-wrap;position:fixed;top:0;left:0;z-index:9999;background:rgba(0,0,0,0.85);max-width:100%;max-height:50vh;overflow:auto;display:none"></div>
+  <script>
+    window.onerror = function(msg, src, line, col, err) {
+      var d = document.getElementById('errmsg');
+      d.style.display = 'block';
+      d.textContent = 'ERROR: ' + msg + '\nLine: ' + line + '\n' + (err && err.stack ? err.stack : '');
+      return false;
+    };
+    window.addEventListener('unhandledrejection', function(e) {
+      var d = document.getElementById('errmsg');
+      d.style.display = 'block';
+      d.textContent = 'PROMISE ERROR: ' + (e.reason && e.reason.stack ? e.reason.stack : e.reason);
+    });
+  </script>
+
+  <!-- Plain JS modules (no JSX needed) -->
+  <script src="js/physics.js"></script>
+  <script src="js/scene3d.js"></script>
+  <script src="js/trail.js"></script>
+  <script src="js/markers.js"></script>
+
+  <!-- React JSX components (transpiled by Babel standalone) -->
+  <script type="text/babel" data-presets="react" src="js/components.jsx"></script>
+  <script type="text/babel" data-presets="react" src="js/simulation.jsx"></script>
+  <script type="text/babel" data-presets="react" src="js/app.jsx"></script>
+</body>
+</html>
