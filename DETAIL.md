@@ -21,7 +21,7 @@
 
 ### 座標與符號
 
-- $g = 9.8\ \text{m/s}^2$，$m = 1\ \text{kg}$，$r = 1\ \text{m}$（模擬中固定值）
+- $g = 9.8$ m/s²，$m = 1$ kg，$r = 1$ m（模擬中固定値）
 - $\theta$：斜面傾角
 - $I$：物體對旋轉軸的轉動慣量
 - $v$：物體質心線速度
@@ -54,7 +54,7 @@ $$F = ma = mg \implies a = g$$
 
 $$mgh = \frac{1}{2}mv^2 + \frac{1}{2}I\omega^2$$
 
-（$mgh$：重力位能；$\tfrac{1}{2}mv^2$：平移動能；$\tfrac{1}{2}I\omega^2$：轉動動能）
+（$mgh$：重力位能；$\frac{1}{2}mv^2$：平移動能；$\frac{1}{2}I\omega^2$：轉動動能）
 
 ### 3.2 純滾動不滑動條件
 
@@ -143,7 +143,7 @@ $$\boxed{T = \sqrt{\frac{2H}{g\sin^2\theta}} \cdot \sqrt{1 + \frac{I}{mr^2}}}$$
 ## 5. 各物體轉動慣量積分推導
 
 以下推導使用柱坐標系，材質密度為 $\rho$，物體半徑 $R$，質量 $M$。  
-代號：$x = r_{\text{inner}}/R$（中空比，$0 \le x < 1$；實心體 $x=0$）
+代號：$x = r_{\text{inner}}/R$（中空比，$0 \le x \lt 1$；實心體 $x=0$）
 
 ### 5.1 實心球 $I = \frac{2}{5}MR^2$
 
@@ -214,8 +214,8 @@ $$\boxed{I = \frac{1}{2}MR^2 \cdot \frac{1-x^4}{1-x^2}}$$
 
 ### 速度排名（下坡，相同中空比 $x$）
 
-- $x < 0.68$：實心球 $>$ 空心球 $>$ 實心柱 $>$ 空心柱
-- $x > 0.68$：實心球 $>$ 實心柱 $>$ 空心球 $>$ 空心柱
+- $x \lt 0.68$：實心球 $>$ 空心球 $>$ 實心柱 $>$ 空心柱
+- $x \gt 0.68$：實心球 $>$ 實心柱 $>$ 空心球 $>$ 空心柱
 
 （交叉點：令 $\frac{2}{5}\cdot\frac{1-x^5}{1-x^3} = \frac{1}{2}$，解得 $x \approx 0.68$）
 
@@ -280,7 +280,7 @@ $$y_p = y_c - r\cos(\theta + k)$$
 $$x_p = x_c + r\sin(\theta - k)$$
 $$y_p = y_c - r\cos(\theta - k)$$
 
-性質：$|P - C| = r$ 恆成立；$k = 2n\pi$ 時接觸點恰好落回斜面。
+性質：$\lvert P - C \rvert = r$ 恆成立；$k = 2n\pi$ 時接觸點恰好落回斜面。
 
 ---
 
@@ -288,7 +288,7 @@ $$y_p = y_c - r\cos(\theta - k)$$
 
 模擬中使用 `calcMaxTimeDown` 以**二分搜尋**求解 $y(T) = H$，原因是 $T$ 的解析式
 $$T = \sqrt{\frac{2H}{c\sin^2\theta}}$$
-雖然存在，但 $c$ 含有 $I$ 的複雜表達式，直接計算即可；二分搜尋作為通用後備，精度達 20 次迭代（誤差 $< 10^{-6}$ s）。
+雖然存在，但 $c$ 含有 $I$ 的複雜表達式，直接計算即可；二分搜尋作為通用後備，精度達 20 次迭代（誤差 $\lt 10^{-6}$ s）。
 
 ---
 
@@ -315,7 +315,7 @@ Assume **pure rolling (no-slip)**: the velocity at the contact point is zero.
 
 ### Coordinates and Symbols
 
-- $g = 9.8\ \text{m/s}^2$, $m = 1\ \text{kg}$, $r = 1\ \text{m}$ (fixed values in simulation)
+- $g = 9.8$ m/s², $m = 1$ kg, $r = 1$ m (fixed values in simulation)
 - $\theta$: inclination angle
 - $I$: moment of inertia about the rotation axis
 - $v$: translational velocity of center of mass
@@ -421,7 +421,7 @@ $$\boxed{T = \sqrt{\frac{2H}{g\sin^2\theta}} \cdot \sqrt{1 + \frac{I}{mr^2}}}$$
 
 ## 5. Moment of Inertia — Integral Derivations
 
-Notation: $x = r_{\text{inner}}/R$ (hollow ratio, $0 \le x < 1$; solid body: $x=0$).
+Notation: $x = r_{\text{inner}}/R$ (hollow ratio, $0 \le x \lt 1$; solid body: $x=0$).
 
 ### 5.1 Solid Sphere $I = \frac{2}{5}MR^2$
 
@@ -477,8 +477,8 @@ As $x \to 1$ (thin shell): hollow sphere → $2/3 \approx 0.667$; hollow cylinde
 
 ### Speed Ranking (downhill, same hollow ratio $x$)
 
-- $x < 0.68$: solid sphere $>$ hollow sphere $>$ solid cylinder $>$ hollow cylinder
-- $x > 0.68$: solid sphere $>$ solid cylinder $>$ hollow sphere $>$ hollow cylinder
+- $x \lt 0.68$: solid sphere $>$ hollow sphere $>$ solid cylinder $>$ hollow cylinder
+- $x \gt 0.68$: solid sphere $>$ solid cylinder $>$ hollow sphere $>$ hollow cylinder
 
 (Crossover: solving $\frac{2}{5}\cdot\frac{1-x^5}{1-x^3} = \frac{1}{2}$ gives $x \approx 0.68$)
 
@@ -538,7 +538,7 @@ Uphill:
 $$x_p = x_c + r\sin(\theta - k)$$
 $$y_p = y_c - r\cos(\theta - k)$$
 
-Property: $|P - C| = r$ always; at $k = 2n\pi$ the contact point returns to the slope surface.
+Property: $\lvert P - C \rvert = r$ always; at $k = 2n\pi$ the contact point returns to the slope surface.
 
 ---
 
@@ -546,4 +546,4 @@ Property: $|P - C| = r$ always; at $k = 2n\pi$ the contact point returns to the 
 
 `calcMaxTimeDown` uses **binary search** to solve $y(T) = H$. The closed-form
 $$T = \sqrt{\frac{2H}{c\sin^2\theta}}$$
-is also valid; binary search serves as a general-purpose fallback with 20-iteration precision (error $< 10^{-6}$ s).
+is also valid; binary search serves as a general-purpose fallback with 20-iteration precision (error $\lt 10^{-6}$ s).
