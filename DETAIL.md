@@ -52,7 +52,7 @@ $$F = ma = mg \implies a = g$$
 
 總機械能守恆（靜摩擦不做功）：
 
-$$\underbrace{mgh}_{\text{重力位能}} = \underbrace{\frac{1}{2}mv^2}_{\text{平移動能}} + \underbrace{\frac{1}{2}I\omega^2}_{\text{轉動動能}}$$
+$$\underbrace{mgh}_{\text{grav. PE}} = \underbrace{\frac{1}{2}mv^2}_{\text{trans. KE}} + \underbrace{\frac{1}{2}I\omega^2}_{\text{rot. KE}}$$
 
 ### 3.2 純滾動不滑動條件
 
@@ -159,7 +159,7 @@ $$= \pi\rho R^5 \cdot \frac{8}{15} = \frac{8}{15}\pi\rho R^5$$
 
 其中 $M = \dfrac{4}{3}\pi R^3 \rho$，故：
 
-$$\boxed{I_{\text{實心球}} = \frac{2}{5}MR^2}$$
+$$\boxed{I = \frac{2}{5}MR^2}$$
 
 ### 5.2 空心球 $I = \dfrac{2}{5}MR^2 \cdot \dfrac{1-x^5}{1-x^3}$
 
@@ -169,7 +169,7 @@ $$I = \frac{8}{15}\pi\rho R^5 - \frac{8}{15}\pi\rho(Rx)^5 = \frac{8}{15}\pi\rho 
 
 $$M = \frac{4}{3}\pi R^3\rho(1-x^3)$$
 
-$$\boxed{I_{\text{空心球}} = \frac{2}{5}MR^2 \cdot \frac{1-x^5}{1-x^3}}$$
+$$\boxed{I = \frac{2}{5}MR^2 \cdot \frac{1-x^5}{1-x^3}}$$
 
 ### 5.3 實心圓柱 $I = \dfrac{1}{2}MR^2$
 
@@ -179,7 +179,7 @@ $$I = \int_0^l \int_0^R 2\pi\rho r^3\,dr\,dz = l \cdot 2\pi\rho \cdot \frac{R^4}
 
 $$M = \pi R^2 l \rho$$
 
-$$\boxed{I_{\text{實心柱}} = \frac{1}{2}MR^2}$$
+$$\boxed{I = \frac{1}{2}MR^2}$$
 
 ### 5.4 空心圓柱 $I = \dfrac{1}{2}MR^2 \cdot \dfrac{1-x^4}{1-x^2}$
 
@@ -189,7 +189,7 @@ $$I = \frac{\pi}{2}l\rho R^4 - \frac{\pi}{2}l\rho(Rx)^4 = \frac{\pi}{2}l\rho R^4
 
 $$M = \pi R^2 l\rho(1-x^2)$$
 
-$$\boxed{I_{\text{空心柱}} = \frac{1}{2}MR^2 \cdot \frac{1-x^4}{1-x^2}}$$
+$$\boxed{I = \frac{1}{2}MR^2 \cdot \frac{1-x^4}{1-x^2}}$$
 
 ---
 
@@ -212,8 +212,8 @@ $$\boxed{I_{\text{空心柱}} = \frac{1}{2}MR^2 \cdot \frac{1-x^4}{1-x^2}}$$
 
 ### 速度排名（下坡，相同中空比 $x$）
 
-- $x < 0.68$：$\text{實心球} > \text{空心球} > \text{實心柱} > \text{空心柱}$
-- $x > 0.68$：$\text{實心球} > \text{實心柱} > \text{空心球} > \text{空心柱}$
+- $x < 0.68$：實心球 $>$ 空心球 $>$ 實心柱 $>$ 空心柱
+- $x > 0.68$：實心球 $>$ 實心柱 $>$ 空心球 $>$ 空心柱
 
 （交叉點：令 $\dfrac{2}{5}\cdot\dfrac{1-x^5}{1-x^3} = \dfrac{1}{2}$，解得 $x \approx 0.68$）
 
