@@ -126,8 +126,10 @@ window.Physics = (function () {
   /**
    * Contact-point (cycloid trace) position — returns THREE.Vector3.
    * Derived from rotating the contact point around the moving centre:
-   *   x_p = x_c + r·sinθ·(1−cos k) − r·cosθ·sin k   (downhill)
-   *   y_p = y_c + r·cosθ·(1−cos k) + r·sinθ·sin k
+   *   Downhill: x_p = x_c − r·sin(θ+k)  [= x_c − r·sinθ·cosk − r·cosθ·sink]
+   *             y_p = y_c − r·cos(θ+k)  [= y_c − r·cosθ·cosk + r·sinθ·sink]
+   *   Uphill:   x_p = x_c + r·sin(θ−k)  [= x_c + r·sinθ·cosk − r·cosθ·sink]
+   *             y_p = y_c − r·cos(θ−k)  [= y_c − r·cosθ·cosk − r·sinθ·sink]
    */
   function getPtPos(t, I, z, theta, isUphill, H, V) {
     const cosT = Math.cos(theta), sinT = Math.sin(theta);
