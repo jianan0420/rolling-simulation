@@ -256,17 +256,6 @@ window.MultiSphereSimulation = function MultiSphereSimulation() {
     if (!sphereRef.current) return;
     stoppedRef.current = [solidStopped, hollowStopped, cylinderStopped, hollowCylStopped];
 
-    // Uphill: dynamically resize slope to fit highest peak
-    if (isUphill && slopeStateRef.current?.mesh) {
-      const peakH = Math.max(
-        Physics.calcYUp(Physics.calcStopTime(I_solid,          theta, liveInitSpeed), I_solid,          theta, liveInitSpeed),
-        Physics.calcYUp(Physics.calcStopTime(I_hollowSphere,   theta, liveInitSpeed), I_hollowSphere,   theta, liveInitSpeed),
-        Physics.calcYUp(Physics.calcStopTime(I_cylinder,       theta, liveInitSpeed), I_cylinder,       theta, liveInitSpeed),
-        Physics.calcYUp(Physics.calcStopTime(I_hollowCylinder, theta, liveInitSpeed), I_hollowCylinder, theta, liveInitSpeed),
-      );
-      Scene3D.updateSlope(slopeStateRef.current, theta, isUphill, peakH, liveHeight);
-    }
-
     const trail = trailRef.current;
     if (!trail) return;
     const cache = trailCacheRef.current;
@@ -426,7 +415,7 @@ window.MultiSphereSimulation = function MultiSphereSimulation() {
             </div>
             <input type="range" min="0" max={sliderMax} step={timeStep} value={time} className="st"
               onChange={e => { setPlaying(false); setTime(parseFloat(e.target.value)); }}
-              onMouseUp={e => e.target.blur()} onTouchEnd={e => e.target.blur()}
+              onMouseUp={e => e.target?.blur()} onTouchEnd={e => e.target?.blur()}
               style={{ width:'100%' }} />
           </div>
 
@@ -514,7 +503,7 @@ window.MultiSphereSimulation = function MultiSphereSimulation() {
                           onMouseUp={() => onRelease && onRelease()}
                           onKeyDown={e => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') e.stopPropagation(); }}
                           onKeyUp={e => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { onRelease && onRelease(); } }}
-                          onTouchEnd={e => { e.target.blur(); onRelease && onRelease(); }}
+                          onTouchEnd={e => { e.target?.blur(); onRelease && onRelease(); }}
                           style={{ flex:1 }} />
                         <input type="number" min={min} max={max} step={step} value={val}
                           onChange={e => set(parseFloat(e.target.value) || min)}
@@ -608,7 +597,7 @@ window.MultiSphereSimulation = function MultiSphereSimulation() {
                   </div>
                   <div style={{ borderTop:'1px solid rgba(0,255,136,0.15)', paddingTop:'10px' }}>
                     <span className="fk">軌跡點座標（擺線 cycloid）</span><br/>
-                    {isUphill ? (<>x_p = s·cosθ − r·sinθ·(1−cos k) − r·cosθ·sin k<br/>y_p = s·sinθ + r·cosθ·(1−cos k) − r·sinθ·sin k</>) : (<>x_p = x_c + r·sinθ·(1−cos k) − r·cosθ·sin k<br/>y_p = y_c + r·cosθ·(1−cos k) + r·sinθ·sin k</>)}
+                    {isUphill ? (<>x_p = s·cosθ − r·sinθ·(1−cos k) − r·cosθ·sin k<br/>y_p = s·sinθ + r·cosθ·(1−cos k) − r·sinθ·sin k</>) : (<>x_p = x_c − r·sinθ·cos k − r·cosθ·sin k<br/>y_p = y_c − r·cosθ·cos k + r·sinθ·sin k</>)}
                     <br/><span style={{ color:'#888', fontSize:'10px' }}>|接觸點 − 球心| = r 恆成立；k=2nπ 時接觸點落回斜面</span>
                   </div>
                 </div>
